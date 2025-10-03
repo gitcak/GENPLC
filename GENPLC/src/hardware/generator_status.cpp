@@ -1,7 +1,12 @@
 #include "generator_status.h"
 #include "generator_calibration.h"
 
-// Helper function to format time duration
+/**
+ * @brief Formats a Unix timestamp into a human-readable "time since" string.
+ *
+ * @param timestamp The Unix timestamp to format.
+ * @return A String representing the time elapsed (e.g., "5 min ago", "2 hours ago", "3 days ago"). Returns "Never" if the timestamp is 0.
+ */
 static String formatTimeSince(uint32_t timestamp) {
     if (timestamp == 0) return "Never";
 
@@ -17,6 +22,17 @@ static String formatTimeSince(uint32_t timestamp) {
     }
 }
 
+/**
+ * @brief Creates a GeneratorStatus object from data received via the CAN bus.
+ *
+ * This function populates a GeneratorStatus struct by fetching sensor, relay, runtime,
+ * and filter data from the provided CAN protocol object. It also applies the stored
+ * calibration settings and formats human-readable strings for display.
+ *
+ * @param canProtocol A const reference to the CanGeneratorProtocol object containing the latest CAN data.
+ * @param canModuleReady A boolean indicating if the CAN module is connected and ready.
+ * @return A fully populated GeneratorStatus object.
+ */
 GeneratorStatus GeneratorStatus::fromCanData(
     const CanGeneratorProtocol& canProtocol,
     bool canModuleReady
@@ -124,7 +140,24 @@ GeneratorStatus GeneratorStatus::fromCanData(
     return status;
 }
 
-// Legacy method for backward compatibility
+/**
+ * @brief Creates a GeneratorStatus object from raw data values.
+ * @deprecated This is a legacy method for backward compatibility and may be removed in future versions.
+ *
+ * @param fuelRaw Raw fuel sensor value.
+ * @param fuelFilterRaw Raw fuel filter sensor value.
+ * @param oilRaw Raw oil level sensor value.
+ * @param oilFilterRaw Raw oil filter sensor value.
+ * @param relays Array of 2 booleans for relay states.
+ * @param inputs Array of 8 booleans for digital input states.
+ * @param ready Boolean indicating if the module is ready.
+ * @param runTimeHours Total generator run time in hours.
+ * @param lastServiceTs Unix timestamp of the last service.
+ * @param fuelFilterHrs Hours since last fuel filter change.
+ * @param oilFilterHrs Hours since last oil filter change.
+ * @param oilChangeHrs Hours since last oil change.
+ * @return A populated GeneratorStatus object.
+ */
 GeneratorStatus GeneratorStatus::fromRawData(
     uint16_t fuelRaw, uint16_t fuelFilterRaw, uint16_t oilRaw, uint16_t oilFilterRaw,
     bool relays[2], bool inputs[8], bool ready, uint32_t runTimeHours, uint32_t lastServiceTs,
