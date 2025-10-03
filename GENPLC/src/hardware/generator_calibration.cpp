@@ -3,6 +3,14 @@
 
 #define GEN_CALIB_NAMESPACE "gen_calib"
 
+/**
+ * @brief Gets the default calibration settings for the generator.
+ *
+ * This function provides a baseline linear calibration where sensor values from 0 to 1023
+ * are mapped linearly to percentages from 0% to 100%. It also sets default service intervals.
+ *
+ * @return A GeneratorCalibration struct populated with default values.
+ */
 GeneratorCalibration GeneratorCalibration::getDefaults() {
     GeneratorCalibration cal;
 
@@ -24,6 +32,16 @@ GeneratorCalibration GeneratorCalibration::getDefaults() {
     return cal;
 }
 
+/**
+ * @brief Calibrates a raw sensor value using a 5-point calibration table.
+ *
+ * This function performs linear interpolation between the provided calibration points
+ * to convert a raw sensor reading into a percentage (0-100).
+ *
+ * @param rawValue The raw sensor value to be calibrated.
+ * @param calPoints An array of 5 calibration points representing 0%, 25%, 50%, 75%, and 100%.
+ * @return The calibrated value as a percentage (0-100).
+ */
 uint16_t GeneratorCalibration::calibrateSensor(uint16_t rawValue, const uint16_t calPoints[5]) const {
     // Clamp raw value to valid range
     rawValue = constrain(rawValue, calPoints[0], calPoints[4]);
@@ -48,6 +66,13 @@ uint16_t GeneratorCalibration::calibrateSensor(uint16_t rawValue, const uint16_t
     return 50;
 }
 
+/**
+ * @brief Retrieves the generator calibration settings from Non-Volatile Storage (NVS).
+ *
+ * If no settings are found in NVS, it loads and returns the default calibration settings.
+ *
+ * @return A GeneratorCalibration struct with the loaded or default settings.
+ */
 GeneratorCalibration getGeneratorCalibration() {
     Preferences prefs;
     GeneratorCalibration cal = GeneratorCalibration::getDefaults();
@@ -72,6 +97,12 @@ GeneratorCalibration getGeneratorCalibration() {
     return cal;
 }
 
+/**
+ * @brief Saves the provided generator calibration settings to NVS.
+ *
+ * @param cal A const reference to the GeneratorCalibration struct containing the settings to save.
+ * @return True if the settings were saved successfully, false on failure.
+ */
 bool saveGeneratorCalibration(const GeneratorCalibration& cal) {
     Preferences prefs;
 
@@ -96,6 +127,12 @@ bool saveGeneratorCalibration(const GeneratorCalibration& cal) {
     return true;
 }
 
+/**
+ * @brief Resets the generator calibration settings in NVS to their default values.
+ *
+ * This function fetches the default settings and saves them to NVS, overwriting any
+ * existing custom calibration.
+ */
 void resetGeneratorCalibrationToDefaults() {
     GeneratorCalibration cal = GeneratorCalibration::getDefaults();
     saveGeneratorCalibration(cal);
