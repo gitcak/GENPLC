@@ -1,22 +1,30 @@
 #include "basic_stamplc.h"
 
+#include <cstring>
+#include <M5StamPLC.h>
+
+extern m5::M5_STAMPLC M5StamPLC;
+
 BasicStampPLC::BasicStampPLC() {
+    stamPLC = nullptr;
     isInitialized = false;
     ioMutex = nullptr;
+    memset(digitalInputs, 0, sizeof(digitalInputs));
+    memset(analogInputs, 0, sizeof(analogInputs));
+    memset(relayOutputs, 0, sizeof(relayOutputs));
 }
 
-bool BasicStampPLC::begin() {
-    // Initialize the M5StamPLC library
-    // IMPORTANT: We don't call M5StamPLC.begin() here as it's already called in the main setup
-    // Disable SD card support here to avoid conflicts with SDCardModule
-    // SD card will be handled by dedicated SDCardModule
-    {
-        auto cfg = stamPLC.config();
-        cfg.enableSdCard = false; // Let SDCardModule handle SD card
-        stamPLC.config(cfg);
+bool BasicStampPLC::begin(m5::M5_STAMPLC* device) {
+    if (isInitialized) {
+        return true;
     }
-    stamPLC.begin();
-    
+
+    stamPLC = device ? device : &M5StamPLC;
+    if (!stamPLC) {
+        Serial.println("StampPLC: No M5StamPLC instance available");
+        return false;
+    }
+
     // Initialize digital inputs and relay outputs
     for (int i = 0; i < 8; i++) {
         digitalInputs[i] = false;
@@ -31,6 +39,7 @@ bool BasicStampPLC::begin() {
     }
     
     isInitialized = true;
+
     if (!ioMutex) {
         ioMutex = xSemaphoreCreateMutex();
         if (!ioMutex) {
@@ -41,23 +50,23 @@ bool BasicStampPLC::begin() {
 }
 
 void BasicStampPLC::update() {
-    if (!isInitialized) return;
+    if (!isInitialized || !stamPLC) return;
     if (!ioMutex) return;
     if (xSemaphoreTake(ioMutex, portMAX_DELAY) != pdTRUE) {
         return;
     }
 
     // Ensure underlying StamPLC subsystem (incl. buttons via IO expander) is updated
-    stamPLC.update();
+    stamPLC->update();
 
     // Read digital inputs
     for (int i = 0; i < 8; i++) {
-        digitalInputs[i] = stamPLC.readPlcInput(i);
+        digitalInputs[i] = stamPLC->readPlcInput(i);
     }
 
     // Read analog inputs (simplified for now)
     for (int i = 0; i < 4; i++) {
-        analogInputs[i] = stamPLC.readPlcInput(i) ? 1023 : 0;
+        analogInputs[i] = stamPLC->readPlcInput(i) ? 1023 : 0;
     }
 
     xSemaphoreGive(ioMutex);
@@ -81,10 +90,14 @@ bool BasicStampPLC::setRelayOutput(uint8_t channel, bool state) {
     
     // Update physical relay
     if (ioMutex && xSemaphoreTake(ioMutex, portMAX_DELAY) == pdTRUE) {
-        stamPLC.writePlcRelay(channel, state);
+        if (stamPLC) {
+            stamPLC->writePlcRelay(channel, state);
+        }
         xSemaphoreGive(ioMutex);
     } else {
-        stamPLC.writePlcRelay(channel, state);
+        if (stamPLC) {
+            stamPLC->writePlcRelay(channel, state);
+        }
     }
     
     return true;
@@ -98,6 +111,10 @@ bool BasicStampPLC::getRelayOutput(uint8_t channel) {
 void BasicStampPLC::printStatus() {
     if (!isInitialized) {
         Serial.println("StampPLC: Not initialized");
+        return;
+    }
+    if (!stamPLC) {
+        Serial.println("StampPLC: M5StamPLC instance unavailable");
         return;
     }
     

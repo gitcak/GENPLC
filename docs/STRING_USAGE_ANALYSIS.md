@@ -47,7 +47,7 @@ String dateStr;                  // Local String in tasks
 **Risk Level: 🟡 MEDIUM**
 
 **Current Usage:**
-- MQTT payload construction with `String payload`
+- Telemetry payload construction with `String payload`
 - AT command responses stored as `String resp`
 - GNSS data parsing with `String gnssStr`
 
@@ -133,14 +133,14 @@ public:
 
 ### 3. Communication Optimizations
 
-#### Fixed Buffer for MQTT
+#### Fixed Buffer for Telemetry
 ```cpp
 // Pre-allocated JSON buffer
-static char mqttPayloadBuffer[1024];
-static StaticJsonDocument<1024> mqttDoc;
+static char payloadBuffer[1024];
+static StaticJsonDocument<1024> payloadDoc;
 
 // Use buffer instead of String
-serializeJson(mqttDoc, mqttPayloadBuffer, sizeof(mqttPayloadBuffer));
+serializeJson(payloadDoc, payloadBuffer, sizeof(payloadBuffer));
 ```
 
 #### AT Command Response Buffers
@@ -166,7 +166,7 @@ char* response = atResponseBuffer;
 3. **Optimize time/date formatting** with snprintf
 
 ### Phase 3: Communication Optimization
-1. **Replace MQTT String payload** with fixed buffer
+1. **Replace telemetry String payload** with fixed buffer
 2. **Optimize AT command parsing** with char* operations
 3. **Implement response buffer pooling**
 

@@ -4,11 +4,12 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <utils/ina226/ina226.h>
 #include <M5StamPLC.h>
 
 class BasicStampPLC {
 private:
-    m5::M5_STAMPLC stamPLC;
+    m5::M5_STAMPLC* stamPLC;
     bool isInitialized;
     SemaphoreHandle_t ioMutex;
     
@@ -21,7 +22,7 @@ public:
     BasicStampPLC();
     
     // Initialization
-    bool begin();
+    bool begin(m5::M5_STAMPLC* device = nullptr);
     
     // Update state
     void update();
@@ -41,7 +42,7 @@ public:
     bool isReady() { return isInitialized; }
     
     // Button access
-    m5::M5_STAMPLC* getStamPLC() { return &stamPLC; }
+    m5::M5_STAMPLC* getStamPLC() { return stamPLC; }
 };
 
 #endif // BASIC_STAMPLC_H

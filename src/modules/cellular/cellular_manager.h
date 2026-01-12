@@ -47,8 +47,6 @@ struct ProviderConfig {
     const char* tertiaryApn;
     const char* username;
     const char* password;
-    const char* mqttBroker;
-    uint16_t mqttPort;
     bool requiresRoaming;
     uint32_t pdpTimeout;
     uint32_t retryDelay;
@@ -124,8 +122,6 @@ public:
     bool testConnectivity();
     bool pingHost(const char* host);
     bool makeHttpRequest(const char* url, String& response);
-    bool sendMqttMessage(const char* topic, const char* payload);
-    bool receiveMqttMessage(String& topic, String& payload, uint32_t timeout = 5000);
 
     // Health monitoring
     void updateHealth();
@@ -244,23 +240,17 @@ extern CellularManager* g_cellularManager;
 #define SORACOM_PRIMARY_APN "soracom.io"
 #define SORACOM_SECONDARY_APN "iot.soracom.io"
 #define SORACOM_TERTIARY_APN "du.soracom.io"
-#define SORACOM_MQTT_BROKER "beam.soracom.io"
-#define SORACOM_MQTT_PORT 1883
 
 // Hologram configurations
 #define HOLOGRAM_PRIMARY_APN "hologram"
 #define HOLOGRAM_USERNAME ""
 #define HOLOGRAM_PASSWORD ""
-#define HOLOGRAM_MQTT_BROKER "mqtt.hologram.io"
-#define HOLOGRAM_MQTT_PORT 8883
 
 // AT&T IoT configurations
 #define ATT_PRIMARY_APN " Broadband"
 #define ATT_SECONDARY_APN "broadband"
 #define ATT_USERNAME ""
 #define ATT_PASSWORD ""
-#define ATT_MQTT_BROKER "mqtt.att.com"
-#define ATT_MQTT_PORT 1883
 
 // Default timeouts and retries
 #define DEFAULT_INIT_TIMEOUT 30000

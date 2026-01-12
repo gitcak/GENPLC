@@ -88,16 +88,6 @@ Line 520: char buf[256];  // Cell JSON (connected)
 **Status:** Acceptable, but buffers should be reused  
 **Recommendation:** Consolidate into single reusable buffer
 
-### 3. MQTT Payload Buffer
-**Location:** `src/modules/mqtt/mqtt_task.cpp:137`
-
-```cpp
-char payload[240];
-```
-
-**Impact:** 240 bytes per MQTT publish  
-**Status:** Acceptable for MQTT task  
-
 ---
 
 ## LOW PRIORITY
@@ -140,7 +130,6 @@ module->setApnCredentials(String(settings.apn), String(settings.apnUser), String
 | Task | Stack Size | Usage Pattern |
 |------|------------|---------------|
 | CatM/GNSS | 19KB (4864 words) | Acceptable for 512-byte buffers |
-| MQTT | 16KB (4096 words) | Adequate for JSON serialization |
 | Display | 16KB (4096 words) | M5GFX rendering |
 | Button | 16KB (4096 words) | Increased from 8KB |
 

@@ -48,7 +48,7 @@ The CatM+GNSS unit you're using is likely the **Unit CatM GNSS (SKU:U137)**. It 
 ### Key Details for StamPLC (PORT C) Integration:  
 - **Pin Mapping**: PORT C's Yellow (G5) = UART_RX, White (G4) = UART_TX (5V/GND for power).  
 - **AT Commands**: Control via SIM7080G AT commands (e.g., `AT+CGNSPWR=1` to enable GNSS, `AT+CGNSINF` to read position data).  
-- **Supported Protocols**: TCP/UDP/HTTP/MQTT for CatM; GPS/GLONASS/BeiDou/Galileo for GNSS.  
+- **Supported Protocols**: TCP/UDP/HTTP for CatM; GPS/GLONASS/BeiDou/Galileo for GNSS.  
 
 ### Quick Test Code Snippet (Arduino):  
 ```cpp  

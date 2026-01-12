@@ -1,0 +1,12 @@
+{
+  // Enable Claude Code extension views
+  "workbench.view.alwaysShowHeaderActions": true,
+  
+  // Ensure sidebar is visible
+  "workbench.sideBar.location": "left",
+  
+  // Claude Code extension settings
+  "claudeCode.preferredLocation": "sidebar",
+  "claudeCode.useTerminal": false
+}
+

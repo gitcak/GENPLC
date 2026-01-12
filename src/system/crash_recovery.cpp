@@ -470,8 +470,7 @@ void CrashRecovery::checkCriticalTaskStacks() {
         "MemoryMonitor", 
         "StatusBar",
         "Display",
-        "CatMGNSS",
-        "MQTT"
+        "CatMGNSS"
     };
     
     for (const char* taskName : criticalTasks) {

@@ -7,6 +7,7 @@
 #define STAMP_PLC_H
 
 #include <Arduino.h>
+#include <utils/ina226/ina226.h>
 #include <M5StamPLC.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -81,6 +82,10 @@ private:
     // Data cache
     PLCData currentData;
     PLCData previousData;
+
+    // Peripheral availability flags
+    bool ina226Available;
+    bool lm75bAvailable;
     
     // Private methods
     bool initializeHardware();

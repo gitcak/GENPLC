@@ -13,8 +13,6 @@ extern EventGroupHandle_t xEventGroupSystemStatus;
 extern QueueHandle_t g_storageQ;
 extern volatile bool g_cellularUp;
 
-QueueHandle_t g_catmCommandQueue = nullptr;
-
 // Function to trigger immediate GNSS update
 void requestGNSSUpdate() {
     if (xEventGroupSystemStatus) {
@@ -22,39 +20,6 @@ void requestGNSSUpdate() {
     }
 }
 
-static bool handleCatMCommand(CatMGNSSModule* module, const CatMCommand& cmd) {
-    if (!module || !module->isModuleInitialized()) {
-        return false;
-    }
-
-    switch (cmd.type) {
-        case CatMCommandType::ConfigureMQTT: {
-            const auto& cfg = cmd.data.config;
-            return module->mqttConfig(String(cfg.host), cfg.port, String(cfg.user), String(cfg.pass), "");
-        }
-        case CatMCommandType::ConnectMQTT: {
-            return module->mqttConnect(15000);
-        }
-        case CatMCommandType::PublishMQTT: {
-            const auto& pub = cmd.data.publish;
-            return module->mqttPublish(String(pub.topic), String(pub.payload), pub.qos, pub.retain);
-        }
-        case CatMCommandType::SubscribeMQTT: {
-            const auto& sub = cmd.data.subscribe;
-            return module->mqttSubscribe(String(sub.topic), sub.qos);
-        }
-        case CatMCommandType::UnsubscribeMQTT: {
-            const auto& unsub = cmd.data.unsubscribe;
-            return module->mqttUnsubscribe(String(unsub.topic));
-        }
-        case CatMCommandType::DisconnectMQTT: {
-            return module->mqttDisconnect();
-        }
-        default:
-            break;
-    }
-    return false;
-}
 
 static void pushStorageRecord(const LogRecord& rec) {
     if (!g_storageQ) return;
@@ -66,31 +31,6 @@ static void pushStorageRecord(const LogRecord& rec) {
     }
 }
 
-bool catmSubmitCommand(const CatMCommand& command,
-                       TickType_t queueWaitTicks,
-                       TickType_t responseWaitTicks,
-                       bool& resultOut) {
-    if (!g_catmCommandQueue) {
-        return false;
-    }
-
-    CatMCommand copy = command;
-    copy.requester = xTaskGetCurrentTaskHandle();
-
-    xTaskNotifyStateClear(NULL);
-
-    if (xQueueSend(g_catmCommandQueue, &copy, queueWaitTicks) != pdTRUE) {
-        return false;
-    }
-
-    uint32_t notificationValue = 0;
-    if (xTaskNotifyWait(0, ULONG_MAX, &notificationValue, responseWaitTicks) != pdTRUE) {
-        return false;
-    }
-
-    resultOut = (notificationValue != 0);
-    return true;
-}
 
 // FreeRTOS task function for CatM+GNSS module
 void vTaskCatMGNSS(void* pvParameters) {
@@ -166,16 +106,6 @@ void vTaskCatMGNSS(void* pvParameters) {
 
 
     for (;;) {
-
-        if (g_catmCommandQueue) {
-            CatMCommand pending{};
-            while (xQueueReceive(g_catmCommandQueue, &pending, 0) == pdTRUE) {
-                bool success = handleCatMCommand(module, pending);
-                if (pending.requester) {
-                    xTaskNotify(pending.requester, success ? 1u : 0u, eSetValueWithOverwrite);
-                }
-            }
-        }
 
         if (!xEventGroupSystemStatus) {
 
@@ -410,7 +340,7 @@ void vTaskCatMGNSS(void* pvParameters) {
 
                 if (xEventGroupSystemStatus) {
 
-                    xEventGroupSetBits(xEventGroupSystemStatus, EVENT_BIT_MQTT_DATA_READY);
+                    xEventGroupSetBits(xEventGroupSystemStatus, EVENT_BIT_GNSS_DATA_READY);
 
                 }
 
@@ -565,28 +495,6 @@ void vTaskCatMGNSS(void* pvParameters) {
 
         lastLinkState = isConnected;
 
-        if (g_catmCommandQueue) {
-            CatMCommand pending{};
-            while (xQueueReceive(g_catmCommandQueue, &pending, 0) == pdTRUE) {
-                bool success = handleCatMCommand(module, pending);
-                if (pending.requester) {
-                    xTaskNotify(pending.requester, success ? 1u : 0u, eSetValueWithOverwrite);
-                }
-            }
-        }
-
     }
 
 }
-
-
-
-
-
-
-
-
-
-
-
-

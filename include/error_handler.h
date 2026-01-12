@@ -33,7 +33,6 @@ enum class ErrorCategory {
     NETWORK = 4,
     GNSS = 5,
     CELLULAR = 6,
-    MQTT = 7,
     STORAGE = 8,
     POWER = 9
 };
@@ -203,7 +202,6 @@ namespace RecoveryStrategies {
     
     // Communication recovery
     bool reconnectCellular();
-    bool reconnectMQTT();
     bool resetNetworkStack();
     
     // Memory recovery

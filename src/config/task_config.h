@@ -35,14 +35,17 @@
 #define TASK_STACK_SIZE_SENSOR          2048  // 8KB - increased to prevent stack overflow
 #define TASK_STACK_SIZE_GNSS            1024  // 4KB
 #define TASK_STACK_SIZE_CELLULAR        1536  // 6KB
-#define TASK_STACK_SIZE_DISPLAY         768   // 3KB
+#define TASK_STACK_SIZE_DISPLAY         3072   // 12KB - increased for M5GFX rendering and UI processing
 #define TASK_STACK_SIZE_DATA_TRANSMIT   1024  // 4KB
 #define TASK_STACK_SIZE_BUTTON_HANDLER  4096  // 16KB (increased from 8KB)
 
-// Application-specific task sizes (words) tuned from stack watermarks
-#define TASK_STACK_SIZE_APP_DISPLAY     4096  // 16KB (M5GFX rendering)
-#define TASK_STACK_SIZE_APP_GNSS        4864  // 19KB (AT I/O, JSON, parsing, GNSS gating)
-#define TASK_STACK_SIZE_APP_MQTT        6144  // 24KB (JSON build + AT MQTT bursts + command handlers)
+// Application-specific task sizes (words) optimized for no-PSRAM StampS3A
+#define TASK_STACK_SIZE_APP_DISPLAY     3072  // 12KB (M5GFX rendering) - reduced
+#define TASK_STACK_SIZE_APP_GNSS        5120  // 20KB (AT I/O, JSON, PDP) - reduced
+
+// Stack monitoring thresholds for no-PSRAM
+#define STACK_WATERMARK_WARNING_THRESHOLD 512   // 512 words (2KB) warning
+#define STACK_WATERMARK_CRITICAL_THRESHOLD 256  // 256 words (1KB) critical
 
 // ============================================================================
 // TASK DELAYS AND TIMING (in FreeRTOS ticks)
@@ -87,14 +90,11 @@
 #define EVENT_BIT_SLEEP_MODE            (1UL << 7)
 
 // Event-driven task coordination bits
-#define EVENT_BIT_MQTT_DATA_READY       (1UL << 8)
-#define EVENT_BIT_MQTT_PUBLISH_REQ      (1UL << 9)
-#define EVENT_BIT_MQTT_RECONNECT_REQ    (1UL << 10)
-#define EVENT_BIT_GNSS_UPDATE_REQ       (1UL << 11)
-#define EVENT_BIT_GNSS_DATA_READY       (1UL << 12)
-#define EVENT_BIT_SYSTEM_ERROR          (1UL << 13)
-#define EVENT_BIT_STATUS_CHANGE         (1UL << 14)
-#define EVENT_BIT_HEAP_LOW              (1UL << 15)
+#define EVENT_BIT_GNSS_UPDATE_REQ       (1UL << 8)
+#define EVENT_BIT_GNSS_DATA_READY       (1UL << 9)
+#define EVENT_BIT_SYSTEM_ERROR          (1UL << 10)
+#define EVENT_BIT_STATUS_CHANGE         (1UL << 11)
+#define EVENT_BIT_HEAP_LOW              (1UL << 12)
 
 // ============================================================================
 // TASK HANDLES

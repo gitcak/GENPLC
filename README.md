@@ -26,7 +26,6 @@ src/
 │   │   ├── catm_gnss_module.cpp
 │   │   └── catm_gnss_task.cpp
 │   ├── http/               # HTTP server for web interface
-│   ├── mqtt/               # MQTT client for data transmission
 │   ├── pwrcan/             # Power CAN bus communication
 │   ├── settings/           # Settings storage and management
 │   └── storage/            # SD card and data logging

@@ -11,7 +11,12 @@
 // CONSTRUCTOR/DESTRUCTOR
 // ============================================================================
 
-StampPLC::StampPLC() : stamPLC(nullptr), xSemaphorePLC(nullptr), xQueuePLCData(nullptr) {
+StampPLC::StampPLC()
+    : stamPLC(nullptr),
+      xSemaphorePLC(nullptr),
+      xQueuePLCData(nullptr),
+      ina226Available(false),
+      lm75bAvailable(false) {
     // Initialize navigation state
     navigationState.currentScreen = 0;
     navigationState.maxScreens = 4;
@@ -71,17 +76,19 @@ void StampPLC::shutdown() {
 bool StampPLC::initializeHardware() {
     // Initialize M5Stack StampPLC
     stamPLC = &M5StamPLC;
-    
+
     // Call begin() but it will be safe since M5StamPLC.begin() was already called
     stamPLC->begin();
-    
+
     // Initialize INA226 current sensor
-    if (!stamPLC->INA226.begin()) {
+    ina226Available = stamPLC->INA226.begin();
+    if (!ina226Available) {
         Serial.println("WARNING: INA226 initialization failed");
     }
-    
+
     // Initialize LM75B temperature sensor
-    if (!stamPLC->LM75B.begin()) {
+    lm75bAvailable = stamPLC->LM75B.begin();
+    if (!lm75bAvailable) {
         Serial.println("WARNING: LM75B initialization failed");
     }
     
@@ -346,17 +353,24 @@ void StampPLC::updateDigitalInputs() {
 
 void StampPLC::updateAnalogSensors() {
     if (xSemaphoreTake(xSemaphorePLC, pdMS_TO_TICKS(10)) == pdTRUE) {
-        // Read INA226 current sensor
-        if (stamPLC->INA226.begin()) {
-            currentData.voltage = stamPLC->INA226.getBusVoltage();
-            currentData.current = stamPLC->INA226.getShuntCurrent();
+        // Read INA226 current sensor (retry init if it previously failed)
+        if (!ina226Available) {
+            ina226Available = stamPLC->INA226.begin();
         }
-        
-        // Read LM75B temperature sensor
-        if (stamPLC->LM75B.begin()) {
-            currentData.temperature = stamPLC->getTemp();
+        if (ina226Available) {
+            currentData.voltage = stamPLC->getPowerVoltage();
+            currentData.current = stamPLC->getIoSocketOutputCurrent();
+        } else {
+            currentData.voltage = 0.0f;
+            currentData.current = 0.0f;
         }
-        
+
+        // Read LM75B temperature sensor (retry init if it previously failed)
+        if (!lm75bAvailable) {
+            lm75bAvailable = stamPLC->LM75B.begin();
+        }
+        currentData.temperature = lm75bAvailable ? stamPLC->getTemp() : 0.0f;
+
         xSemaphoreGive(xSemaphorePLC);
     }
 }

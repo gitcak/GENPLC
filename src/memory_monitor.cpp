@@ -126,7 +126,8 @@ void MemoryMonitor::monitorTask(void* pvParameters) {
 // STATISTICS ACCESS
 // ============================================================================
 MemoryStats MemoryMonitor::getStats() const {
-    MemoryStats result;
+    MemoryStats result{};
+    result.status = MemoryStatus::NORMAL;
     if (mutex && xSemaphoreTake(mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         result = stats;
         xSemaphoreGive(mutex);

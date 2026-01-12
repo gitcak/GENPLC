@@ -110,7 +110,6 @@ xTaskCreatePinnedToCore(..., TASK_PRIORITY_INDUSTRIAL_IO, ...);
 - **Button task** - `TASK_PRIORITY_DISPLAY`
 - **Storage task** - `TASK_PRIORITY_DATA_TRANSMIT`
 - **Web task** - `TASK_PRIORITY_DATA_TRANSMIT`
-- **MQTT task** - `TASK_PRIORITY_DATA_TRANSMIT`
 - **Purpose:** User interface and data transmission
 - **Rationale:** Important but not time-critical
 
@@ -140,7 +139,7 @@ xTaskCreatePinnedToCore(..., TASK_PRIORITY_INDUSTRIAL_IO, ...);
 - **Rationale:** GNSS requires timely processing, LVGL needs 1ms precision
 
 ### ✅ **User Interface and Data (Priority 2)**
-**Display, Button, Storage, Web, MQTT Tasks:**
+**Display, Button, Storage, Web Tasks:**
 - **Function:** User interface, data transmission
 - **Priority:** `TASK_PRIORITY_DISPLAY` or `TASK_PRIORITY_DATA_TRANSMIT` (2)
 - **Rationale:** Important for user experience but not time-critical

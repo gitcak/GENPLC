@@ -233,7 +233,6 @@ const char* ErrorHandler::categoryToString(ErrorCategory category) const {
         case ErrorCategory::NETWORK: return "NETWORK";
         case ErrorCategory::GNSS: return "GNSS";
         case ErrorCategory::CELLULAR: return "CELLULAR";
-        case ErrorCategory::MQTT: return "MQTT";
         case ErrorCategory::STORAGE: return "STORAGE";
         case ErrorCategory::POWER: return "POWER";
         default: return "UNKNOWN";
@@ -277,4 +276,3 @@ bool ErrorHandler::recoverFromNetworkError(const ErrorEvent& error) {
 bool ErrorHandler::recoverFromSystemError(const ErrorEvent& error) {
     return false;
 }
-

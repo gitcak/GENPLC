@@ -190,15 +190,6 @@ public:
     bool sendHTTP(const String& url, const String& data, String& response);
     bool sendJSON(const String& url, JsonDocument& json, String& response);
     
-    // MQTT over SIM7080 AT (AT+SM*)
-    bool mqttConfig(const String& host, uint16_t port, const String& user, const String& pass, const String& clientId);
-    bool mqttConnect(uint32_t timeoutMs = 15000);
-    bool mqttPublish(const String& topic, const String& payload, int qos = 0, bool retain = false);
-    bool mqttSubscribe(const String& topic, int qos = 1);
-    bool mqttUnsubscribe(const String& topic);
-    bool mqttCheckIncoming(String& topic, String& payload, uint32_t timeoutMs = 100);
-    bool mqttDisconnect();
-    
     // Status
     CatMGNSSState getState() { return state; }
     bool isModuleInitialized() { return isInitialized; }
@@ -239,9 +230,6 @@ private:
     uint64_t lastTxBytesSample_ = 0;
     uint64_t lastRxBytesSample_ = 0;
     uint32_t lastStatsSampleMs_ = 0;
-
-    // MQTT state
-    bool mqttConfigured_ = false;
 
     // Network time state
     bool networkTimeConfigured_ = false;

@@ -359,7 +359,6 @@ sd_rotate_if_big(path, 512 * 1024);  // 512 KB
 | GNSS | ✅ Active | `/data/gnss.jsonl` |
 | Cellular | ✅ Active | `/data/cellular.jsonl` |
 | System Events | ✅ Active | `/data/system.jsonl` |
-| MQTT | ⚠️ Not yet implemented | TBD |
 | Sensors | ⚠️ Not yet implemented | TBD |
 | CAN/PWRCAN | ⚠️ Not yet implemented | TBD |
 
@@ -368,7 +367,7 @@ sd_rotate_if_big(path, 512 * 1024);  // 512 KB
 ## Future Enhancements
 
 1. **Compression:** gzip old log files to save space
-2. **Upload:** Send logs to cloud via MQTT on cellular connect
+2. **Upload:** Send logs to cloud via HTTP on cellular connect
 3. **Analytics:** Parse logs for statistics (average signal, GPS accuracy)
 4. **Filtering:** Configurable log levels (DEBUG/INFO/WARN/ERROR)
 5. **Remote Access:** Download logs via web interface

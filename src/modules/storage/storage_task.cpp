@@ -8,7 +8,7 @@ SemaphoreHandle_t g_sdMutex = nullptr;
 extern SDCardModule* sdModule;
 
 static bool sd_rotate_if_big(const char* path, size_t maxBytes) {
-    File f = SD.open(path, FILE_READ);
+    File f = SD.open(path, "r");
     if (!f) return true;  // nothing to rotate yet
     size_t sz = f.size();
     f.close();
@@ -17,7 +17,7 @@ static bool sd_rotate_if_big(const char* path, size_t maxBytes) {
     snprintf(bak, sizeof(bak), "%s.1", path);
     SD.remove(bak);
     SD.rename(path, bak);
-    File nf = SD.open(path, FILE_WRITE);
+    File nf = SD.open(path, "w");
     if (nf) nf.close();
     return true;
 }
@@ -31,7 +31,7 @@ static void sd_append_jsonl(const char* path, const char* jsonLine) {
     xSemaphoreTake(g_sdMutex, portMAX_DELAY);
     SD.mkdir("/data");
     sd_rotate_if_big(path, 512 * 1024);
-    File f = SD.open(path, FILE_APPEND);
+    File f = SD.open(path, "a");
     if (f) {
         f.println(jsonLine);
         f.close();

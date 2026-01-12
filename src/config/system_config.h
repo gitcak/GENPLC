@@ -31,10 +31,14 @@
 #define PLC_SPI_CS_PIN 15
 
 // CatM Cellular Communication (Port C)
-#define CATM_UART_RX_PIN 4
-#define CATM_UART_TX_PIN 5
+// Note: Host RX connects to Unit TX (White/G4), Host TX to Unit RX (Yellow/G5)
+#define CATM_UART_RX_PIN 4  // Host RX <- Unit TX (White/G4)
+#define CATM_UART_TX_PIN 5  // Host TX -> Unit RX (Yellow/G5)
 #define CATM_UART_BAUD 115200
 #define CATM_UART_CONFIG SERIAL_8N1
+#ifndef CATM_PWRKEY_PIN
+#define CATM_PWRKEY_PIN -1
+#endif
 
 // ============================================================================
 // CATM CONFIGURATION
@@ -42,8 +46,8 @@
 #define CATM_APN "soracom.io"
 #define CATM_USER "sora"
 #define CATM_PASS "sora"
-#define CATM_SERVER "mqtt.example.com"
-#define CATM_PORT 1883
+#define CATM_SERVER "http.example.com"
+#define CATM_PORT 80
 #define CATM_AT_TIMEOUT_MS 5000
 #define CATM_RETRY_COUNT 3
 
@@ -103,9 +107,24 @@
 // ============================================================================
 // MEMORY CONFIGURATION
 // ============================================================================
-#define JSON_BUFFER_SIZE 1024
-#define MQTT_BUFFER_SIZE 512
-#define UART_BUFFER_SIZE 256
+// Optimized for StampS3A without PSRAM (limited SRAM)
+#define JSON_BUFFER_SIZE 512      // Reduced from 1024
+#define UART_BUFFER_SIZE 128      // Reduced from 256
+
+// Memory pool sizes optimized for no-PSRAM
+#define MEMORY_POOL_SMALL_SIZE    32     // Reduced from 64
+#define MEMORY_POOL_MEDIUM_SIZE   128    // Reduced from 256
+#define MEMORY_POOL_LARGE_SIZE    512    // Reduced from 1024
+
+// Reduced pool counts for limited SRAM
+#define MEMORY_POOL_SMALL_BLOCKS   8     // Reduced from 16
+#define MEMORY_POOL_MEDIUM_BLOCKS  4     // Reduced from 8
+#define MEMORY_POOL_LARGE_BLOCKS   2     // Reduced from 4
+
+// Stack optimization for no-PSRAM
+#define ENABLE_STACK_MONITORING  true
+#define MIN_FREE_HEAP_THRESHOLD  8192   // 8KB minimum free heap
+#define CRITICAL_HEAP_THRESHOLD  4096   // 4KB critical threshold
 
 // ============================================================================
 // DEBUG AND LOGGING
