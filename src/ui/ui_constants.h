@@ -8,6 +8,16 @@
 
 #include <stdint.h>
 
+// Display dimensions - use macros for consistency with system_config.h
+// Note: DISPLAY_WIDTH/DISPLAY_HEIGHT may be defined in system_config.h
+// The StampPLC has 240 width x 135 height in landscape orientation
+#ifndef UI_DISPLAY_W
+#define UI_DISPLAY_W 240
+#endif
+#ifndef UI_DISPLAY_H
+#define UI_DISPLAY_H 135
+#endif
+
 // UI Layout Constants
 constexpr int16_t STATUS_BAR_H  = 14;   // status bar height
 constexpr int16_t BUTTON_BAR_Y   = 123;  // y baseline for button labels

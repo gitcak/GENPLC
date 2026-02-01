@@ -1,0 +1,28 @@
+menu "M5_SIM7080G (SIM7080G)"
+
+config M5_SIM7080G_UART_PORT
+    int "UART port number"
+    default 1
+    help
+        ESP-IDF UART port used to talk to the SIM7080G module.
+
+config M5_SIM7080G_UART_TX_PIN
+    int "UART TX GPIO"
+    default 17
+    help
+        GPIO used as UART TX to the module (ESP32 -> SIM7080G RX).
+
+config M5_SIM7080G_UART_RX_PIN
+    int "UART RX GPIO"
+    default 16
+    help
+        GPIO used as UART RX from the module (ESP32 <- SIM7080G TX).
+
+config M5_SIM7080G_UART_BAUD
+    int "UART baud rate"
+    default 115200
+    help
+        Default baud rate for SIM7080G UART.
+
+endmenu
+

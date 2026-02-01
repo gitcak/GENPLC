@@ -1,3 +1,14 @@
+/*
+ * UI Components Header
+ *
+ * NOTE: This module previously contained sprite-based card drawing functions
+ * (drawCard, drawCardCentered, drawKV, drawBar) that were never used.
+ * They have been removed to reduce dead code and memory footprint.
+ *
+ * The page-specific drawing helpers now live in each page's .cpp file,
+ * which is simpler and avoids unused abstractions.
+ */
+
 #ifndef UI_COMPONENTS_H
 #define UI_COMPONENTS_H
 
@@ -7,21 +18,7 @@
 
 namespace ui {
 
-// Draw a titled card with optional small icon in the header
-void drawCard(lgfx::LGFX_Sprite* s, int x, int y, int w, int h,
-              const char* title, lgfx::LGFX_Sprite* icon = nullptr);
-
-// Draw a card with centered title + icon (horizontally and roughly vertically)
-void drawCardCentered(lgfx::LGFX_Sprite* s, int x, int y, int w, int h,
-                      const char* title, lgfx::LGFX_Sprite* icon = nullptr);
-
-// Key/Value row (single line)
-void drawKV(lgfx::LGFX_Sprite* s, int x, int y,
-            const char* key, const char* value, uint16_t color = theme().text);
-
-// Horizontal percentage bar with border
-void drawBar(lgfx::LGFX_Sprite* s, int x, int y, int w, int h,
-             int percent, uint16_t color);
+// Currently empty - page-specific helpers are defined locally in each page
 
 }
 

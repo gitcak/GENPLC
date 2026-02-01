@@ -14,7 +14,7 @@ This file provides comprehensive guidance for AI assistants working with the GEN
 - **I/O**: 8 digital inputs, 4 analog channels, 2 relay outputs
 
 ### Project Status
-The project has undergone a recovery/stabilization phase addressing mutex contention, memory pressure, and cellular connectivity issues. The current build uses a simplified 3-task architecture for stability.
+The project has undergone a recovery/stabilization phase addressing mutex contention, memory pressure, and cellular connectivity issues. The current build uses a simplified 3-task architecture for stability. **UI refactoring completed** - modern theme, vector icons, interactive settings, and memory optimizations.
 
 ## Repository Structure
 
@@ -294,10 +294,22 @@ Handles cellular connectivity and GPS:
 
 ### UI System (`src/ui/`)
 Display management:
+- **Modern Industrial Dark Theme** - Unified color palette (`theme.h/cpp`)
+- **Primitive-drawn Vector Icons** - Satellite, GPS, Cellular, Gear, Log icons (`icon_manager.cpp`)
+- **Interactive Settings Page** - Brightness, sleep timeout controls with NVS persistence
+- **Per-page Scroll Support** - Dynamic content height calculation functions
+- **Memory-efficient Rendering** - Static buffers, no String allocations during draw
 - Page rendering via M5GFX sprites
 - Button navigation via event queue
 - Status indicators (signal bars, memory)
 - Modal dialogs for errors
+
+**UI Refactoring Status:** ✅ Complete (see `docs/UI_REFACTORING_CHANGELOG.md`)
+- Theme unification across all pages
+- Dead code removal and String usage fixes
+- Icon system upgrade (primitive-drawn glyphs)
+- Interactive settings with NVS persistence
+- Per-page scroll height functions
 
 ### System Utilities (`src/system/`)
 Core infrastructure:

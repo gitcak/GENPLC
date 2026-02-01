@@ -38,6 +38,7 @@
 #include "modules/pwrcan/pwrcan_module.h"
 #include "modules/storage/sd_card_module.h"
 #include "modules/storage/storage_task.h"
+#include "modules/settings/settings_store.h"
 #include "ui/theme.h"
 #include "ui/components.h"
 #include "ui/ui_constants.h"
@@ -241,12 +242,12 @@ static SystemLEDState currentLEDState = SystemLEDState::BOOTING;
 static uint32_t lastLEDBlink = 0;
 static bool ledBlinkState = false;
 
-// Global variables for actual functionality
-static uint32_t lastDisplayActivity = 0;
-static bool displaySleepEnabled = true; // Enable display sleep by default
-static bool displayAsleep = false;
-static const uint32_t DISPLAY_SLEEP_TIMEOUT_MS = 120000; // 2 minutes
-static uint8_t displayBrightness = 100; // Default brightness (0-255, adjust as needed)
+// Global display settings (extern'd by settings_page.cpp)
+uint32_t lastDisplayActivity = 0;
+bool displaySleepEnabled = true;           // Enable display sleep by default
+bool displayAsleep = false;
+uint32_t displaySleepTimeoutMs = 120000;   // 2 minutes (configurable now)
+uint8_t displayBrightness = 100;           // Default brightness (0-255)
 
 // clampScroll moved to ui/ui_constants.h
 
@@ -403,8 +404,52 @@ void vTaskButton(void* pvParameters) {
                 cHandled = true;
                 DEBUG_LOG_BUTTON_PRESS("C", "GoSYS (long press)");
             } else if (btnC && !btnC->isPressed() && currentPage != DisplayPage::SETTINGS_PAGE) { cHandled = false; }
+        } else if (currentPage == DisplayPage::SETTINGS_PAGE) {
+            // SETTINGS PAGE: Special button handling
+            // A = back to landing
+            // B short = select previous item, B long = decrease value
+            // C short = select next item, C long = increase value
+            if (btnA && btnA->wasPressed()) {
+                enqueueUIEvent(UIEventType::GoLanding);
+            }
+
+            // B button: long press = adjust down, short press = prev item
+            if (btnB && btnB->pressedFor(LONG_MS) && !bHandled) {
+                settingsAdjustValue(-1);  // Decrease
+                enqueueUIEvent(UIEventType::Redraw);
+                bHandled = true;
+            } else if (btnB && !btnB->isPressed()) {
+                bHandled = false;
+            } else if (btnB && btnB->wasPressed()) {
+                // Move to previous settings item
+                SettingsItem cur = settingsGetSelected();
+                if (cur == SettingsItem::BRIGHTNESS) {
+                    settingsSetSelected(SettingsItem::SLEEP_TIMEOUT);
+                } else {
+                    settingsSetSelected((SettingsItem)((uint8_t)cur - 1));
+                }
+                enqueueUIEvent(UIEventType::Redraw);
+            }
+
+            // C button: long press = adjust up, short press = next item
+            if (btnC && btnC->pressedFor(LONG_MS) && !cHandled) {
+                settingsAdjustValue(+1);  // Increase
+                enqueueUIEvent(UIEventType::Redraw);
+                cHandled = true;
+            } else if (btnC && !btnC->isPressed()) {
+                cHandled = false;
+            } else if (btnC && btnC->wasPressed()) {
+                // Move to next settings item
+                SettingsItem cur = settingsGetSelected();
+                if (cur == SettingsItem::SLEEP_TIMEOUT) {
+                    settingsSetSelected(SettingsItem::BRIGHTNESS);
+                } else {
+                    settingsSetSelected((SettingsItem)((uint8_t)cur + 1));
+                }
+                enqueueUIEvent(UIEventType::Redraw);
+            }
         } else {
-            // In-page: A=HOME (back). B/C short=Scroll Up/Down. B/C long=Prev/Next page.
+            // OTHER PAGES: A=HOME (back). B/C short=Scroll Up/Down. B/C long=Prev/Next page.
             if (btnA && btnA->wasPressed()) {
                 enqueueUIEvent(UIEventType::GoLanding);
             }
@@ -428,8 +473,6 @@ void vTaskButton(void* pvParameters) {
             } else if (btnC && btnC->wasPressed()) {
                 enqueueUIEvent(UIEventType::ScrollDown);
             }
-
-            // Settings page: no special long-press actions beyond above
         }
         
         // Debug every 5s - only use buttons that are within scope
@@ -506,7 +549,7 @@ void vTaskDisplay(void* pvParameters) {
         // Disabled when LVGL UI is active to avoid unintended blanking
         #if !LVGL_UI_TEST_MODE
         if (displaySleepEnabled) {
-            shouldSleep = (now - lastDisplayActivity > DISPLAY_SLEEP_TIMEOUT_MS);
+            shouldSleep = (now - lastDisplayActivity > displaySleepTimeoutMs);
             
             if (shouldSleep && !displayAsleep) {
                 // Put display to sleep and turn off backlight
@@ -568,42 +611,42 @@ void vTaskDisplay(void* pvParameters) {
                             break;
                         case UIEventType::ScrollUp:
                             switch (currentPageLocal) {
-                                case DisplayPage::GNSS_PAGE:   
-                                    scrollGNSS = clampScroll(scrollGNSS - SCROLL_STEP, 122); 
+                                case DisplayPage::GNSS_PAGE:
+                                    scrollGNSS = clampScroll(scrollGNSS - SCROLL_STEP, gnssPageContentHeight());
                                     break;
-                                case DisplayPage::CELLULAR_PAGE: 
-                                    scrollCELL = clampScroll(scrollCELL - SCROLL_STEP, LINE_H2 + LINE_H1 * 11); 
+                                case DisplayPage::CELLULAR_PAGE:
+                                    scrollCELL = clampScroll(scrollCELL - SCROLL_STEP, cellularPageContentHeight());
                                     break;
-                                case DisplayPage::SYSTEM_PAGE: 
-                                    scrollSYS = clampScroll(scrollSYS - SCROLL_STEP, LINE_H2 + LINE_H1 * 16); 
+                                case DisplayPage::SYSTEM_PAGE:
+                                    scrollSYS = clampScroll(scrollSYS - SCROLL_STEP, systemPageContentHeight());
                                     break;
-                                case DisplayPage::LOGS_PAGE: {
-                                    int16_t contentH = (int16_t)log_count() * LINE_H1 + 8;
-                                    if (contentH < (VIEW_HEIGHT + 1)) contentH = VIEW_HEIGHT + 1;
-                                    scrollLOGS = clampScroll(scrollLOGS - SCROLL_STEP, contentH);
+                                case DisplayPage::SETTINGS_PAGE:
+                                    scrollSETTINGS = clampScroll(scrollSETTINGS - SCROLL_STEP, settingsPageContentHeight());
                                     break;
-                                }
+                                case DisplayPage::LOGS_PAGE:
+                                    scrollLOGS = clampScroll(scrollLOGS - SCROLL_STEP, logsPageContentHeight());
+                                    break;
                                 default: break;
                             }
                             pageChangedLocal = true;
                             break;
                         case UIEventType::ScrollDown:
                             switch (currentPageLocal) {
-                                case DisplayPage::GNSS_PAGE:   
-                                    scrollGNSS = clampScroll(scrollGNSS + SCROLL_STEP, 122); 
+                                case DisplayPage::GNSS_PAGE:
+                                    scrollGNSS = clampScroll(scrollGNSS + SCROLL_STEP, gnssPageContentHeight());
                                     break;
-                                case DisplayPage::CELLULAR_PAGE: 
-                                    scrollCELL = clampScroll(scrollCELL + SCROLL_STEP, LINE_H2 + LINE_H1 * 11); 
+                                case DisplayPage::CELLULAR_PAGE:
+                                    scrollCELL = clampScroll(scrollCELL + SCROLL_STEP, cellularPageContentHeight());
                                     break;
-                                case DisplayPage::SYSTEM_PAGE: 
-                                    scrollSYS = clampScroll(scrollSYS + SCROLL_STEP, LINE_H2 + LINE_H1 * 16); 
+                                case DisplayPage::SYSTEM_PAGE:
+                                    scrollSYS = clampScroll(scrollSYS + SCROLL_STEP, systemPageContentHeight());
                                     break;
-                                case DisplayPage::LOGS_PAGE: {
-                                    int16_t contentH = (int16_t)log_count() * LINE_H1 + 8;
-                                    if (contentH < (VIEW_HEIGHT + 1)) contentH = VIEW_HEIGHT + 1;
-                                    scrollLOGS = clampScroll(scrollLOGS + SCROLL_STEP, contentH);
+                                case DisplayPage::SETTINGS_PAGE:
+                                    scrollSETTINGS = clampScroll(scrollSETTINGS + SCROLL_STEP, settingsPageContentHeight());
                                     break;
-                                }
+                                case DisplayPage::LOGS_PAGE:
+                                    scrollLOGS = clampScroll(scrollLOGS + SCROLL_STEP, logsPageContentHeight());
+                                    break;
                                 default: break;
                             }
                             pageChangedLocal = true;
@@ -885,63 +928,101 @@ void drawStatusBar() {
 // ARDUINO SETUP & LOOP
 // ============================================================================
 static void drawModalOverlay() {
+    const auto& th = ui::theme();
+    auto& d = M5StamPLC.Display;
+
     // Modal in content area only to avoid clashing with status bar
-    const int w = M5StamPLC.Display.width();
+    const int w = d.width();
     const int contentY = CONTENT_TOP;
     const int contentH = CONTENT_BOTTOM - CONTENT_TOP;
-    const int boxW = w - 24;
-    const int boxH = 78;
+    const int boxW = w - 20;
+    const int boxH = 82;
     const int x = (w - boxW) / 2;
     const int y = contentY + (contentH - boxH) / 2;
 
-    // Opaque backdrop for content area to fully hide page content
-    M5StamPLC.Display.fillRect(0, contentY, w, contentH, BLACK);
+    // ─── Backdrop with subtle gradient tint ───
+    d.fillRect(0, contentY, w, contentH, th.overlay);
 
-    // Modal box
-    const uint16_t bg = 0x3186; // slightly lighter gray for contrast
-    M5StamPLC.Display.fillRect(x, y, boxW, boxH, bg);
-    M5StamPLC.Display.drawRect(x, y, boxW, boxH, YELLOW);
+    // ─── Modal card with modern styling ───
+    // Outer glow/shadow effect (subtle)
+    d.fillRoundRect(x - 2, y - 2, boxW + 4, boxH + 4, th.radius + 2, th.borderSubtle);
 
-    // Title (centered)
-    M5StamPLC.Display.setTextColor(WHITE);
-    M5StamPLC.Display.setTextSize(2);
-    {
-        const char* ttl = "Unit Not Found";
-        int tw = M5StamPLC.Display.textWidth(ttl);
-        int tx = x + (boxW - tw) / 2;
-        M5StamPLC.Display.setCursor(tx, y + 6);
-        M5StamPLC.Display.print(ttl);
-    }
+    // Main modal background
+    d.fillRoundRect(x, y, boxW, boxH, th.radius, th.modalBg);
 
-    // Body
-    M5StamPLC.Display.setTextSize(1);
-    // Short, pre-wrapped lines to avoid overflow
-    M5StamPLC.Display.setCursor(x + 8, y + 28);
-    M5StamPLC.Display.print("Comm Unit (CatM+GNSS) not detected.");
-    M5StamPLC.Display.setCursor(x + 8, y + 40);
-    M5StamPLC.Display.print("Connect unit, then press C to retry.");
+    // Border with warning accent
+    d.drawRoundRect(x, y, boxW, boxH, th.radius, th.modalBorder);
 
+    // Inner highlight (top edge, subtle)
+    d.drawFastHLine(x + th.radius, y + 1, boxW - 2 * th.radius, th.surface);
+
+    // ─── Warning icon area (left strip) ───
+    d.fillRoundRect(x, y, 6, boxH, 2, th.orange);
+
+    // ─── Title ───
+    d.setTextColor(th.text, th.modalBg);
+    d.setTextSize(2);
+    const char* ttl = "Unit Not Found";
+    int tw = d.textWidth(ttl);
+    int tx = x + (boxW - tw) / 2;
+    d.setCursor(tx, y + 8);
+    d.print(ttl);
+
+    // Title underline
+    d.drawFastHLine(x + 12, y + 26, boxW - 24, th.sectionLine);
+
+    // ─── Body text ───
+    d.setTextSize(1);
+    d.setTextColor(th.textSecondary, th.modalBg);
+    d.setCursor(x + 12, y + 32);
+    d.print("CatM+GNSS comm unit not detected.");
+    d.setCursor(x + 12, y + 44);
+    d.print("Connect unit and press C to retry.");
+
+    // ─── Error details (if present) ───
     if (g_commFailureDescription.length()) {
-        M5StamPLC.Display.setTextColor(YELLOW);
-        int16_t detailsTop = y + 52;
-        drawWrappedText(g_commFailureDescription, x + 8, detailsTop, boxW - 16, 10);
+        // Error detail card
+        d.fillRoundRect(x + 10, y + 54, boxW - 20, 14, 3, th.redDim);
+        d.setTextColor(th.yellow, th.redDim);
+        d.setCursor(x + 14, y + 57);
+        // Truncate if too long
+        if (g_commFailureDescription.length() < 38) {
+            d.print(g_commFailureDescription.c_str());
+        } else {
+            char truncBuf[40];
+            strncpy(truncBuf, g_commFailureDescription.c_str(), 35);
+            truncBuf[35] = '\0';
+            strcat(truncBuf, "...");
+            d.print(truncBuf);
+        }
     }
 
-    // Actions row
-    M5StamPLC.Display.setTextColor(CYAN);
-    M5StamPLC.Display.setCursor(x + 8, y + boxH - 16);
-    M5StamPLC.Display.print("A: OK");
-    M5StamPLC.Display.setCursor(x + boxW - 80, y + boxH - 16);
-    M5StamPLC.Display.print("C: Retry");
+    // ─── Action buttons (modern pill style) ───
+    int btnY = y + boxH - 18;
+    int btnH = 14;
 
-    // Optional toast message while retrying
+    // OK button (left)
+    d.fillRoundRect(x + 10, btnY, 48, btnH, 4, th.button);
+    d.setTextColor(th.buttonText, th.button);
+    d.setCursor(x + 18, btnY + 3);
+    d.print("A: OK");
+
+    // Retry button (right, highlighted)
+    d.fillRoundRect(x + boxW - 64, btnY, 54, btnH, 4, th.cyanDim);
+    d.drawRoundRect(x + boxW - 64, btnY, 54, btnH, 4, th.cyan);
+    d.setTextColor(th.cyan, th.cyanDim);
+    d.setCursor(x + boxW - 56, btnY + 3);
+    d.print("C: Retry");
+
+    // ─── Toast message (while retrying) ───
     if (g_retryToastActive && (int32_t)(g_retryToastUntilMs - millis()) > 0) {
-        M5StamPLC.Display.setTextColor(YELLOW);
+        // Animated-style toast
+        d.fillRoundRect(x + (boxW - 70) / 2, btnY - 16, 70, 12, 4, th.yellowDim);
+        d.setTextColor(th.yellow, th.yellowDim);
         const char* toast = "Retrying...";
-        int tw = M5StamPLC.Display.textWidth(toast);
-        int tx = x + (boxW - tw) / 2;
-        M5StamPLC.Display.setCursor(tx, y + boxH - 30);
-        M5StamPLC.Display.print(toast);
+        int toastW = d.textWidth(toast);
+        d.setCursor(x + (boxW - toastW) / 2, btnY - 14);
+        d.print(toast);
     } else {
         g_retryToastActive = false;
     }
@@ -1178,6 +1259,15 @@ void setup() {
     Serial.println("M5StamPLC initialized");
     Serial.printf("Display w=%d, h=%d\n", M5StamPLC.Display.width(), M5StamPLC.Display.height());
     
+    // Load display settings from NVS
+    {
+        uint16_t sleepSec = 120;
+        displaySettingsLoad(displayBrightness, displaySleepEnabled, sleepSec);
+        displaySleepTimeoutMs = (uint32_t)sleepSec * 1000;
+        Serial.printf("Display settings loaded: brightness=%d, sleep=%s, timeout=%us\n",
+                      displayBrightness, displaySleepEnabled ? "ON" : "OFF", sleepSec);
+    }
+
     // Initialize display brightness
     M5StamPLC.Display.setBrightness(displayBrightness);
     Serial.printf("Display brightness set to %d\n", displayBrightness);
