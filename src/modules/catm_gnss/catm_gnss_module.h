@@ -9,6 +9,29 @@
 #include <time.h>
 #include "cell_status.h"
 #include "gnss_status.h"
+#include <M5_SIM7080G.h>
+
+class MutexGuard {
+public:
+    explicit MutexGuard(SemaphoreHandle_t mutex, TickType_t timeout = pdMS_TO_TICKS(3000))
+        : mutex_(mutex), acquired_(false) {
+        if (mutex_) {
+            acquired_ = (xSemaphoreTake(mutex_, timeout) == pdTRUE);
+        }
+    }
+
+    ~MutexGuard() {
+        if (acquired_ && mutex_) {
+            xSemaphoreGive(mutex_);
+        }
+    }
+
+    bool acquired() const { return acquired_; }
+
+private:
+    SemaphoreHandle_t mutex_;
+    bool acquired_;
+};
 
 // ============================================================================
 // CATM+GNSS MODULE STATES
@@ -114,6 +137,11 @@ class CatMGNSSModule {
 private:
     // Hardware interface
     HardwareSerial* serialModule;
+    M5_SIM7080G* modem_;
+    SIM7080G_Network* network_;
+    SIM7080G_GNSS* gnss_;
+    SIM7080G_MQTT* mqtt_;
+    SIM7080G_HTTP* http_;
     
     // FreeRTOS components
     SemaphoreHandle_t serialMutex;
@@ -127,6 +155,7 @@ private:
     String lastError_;
     int lastProbeRx_ = -1;
     int lastProbeTx_ = -1;
+    SIM7080G_String lastHttpBaseUrl_;
     
     // AT command handling
     bool sendATCommand(const String& command, String& response, uint32_t timeout = 1000);
@@ -153,6 +182,7 @@ private:
     bool parseNetDevStatus(const String& resp, uint64_t& txBytes, uint64_t& rxBytes, uint32_t& txBps, uint32_t& rxBps);
     bool updateNetworkStats();
     void resetNetworkStats();
+    bool parseGnssUtc(const SIM7080G_String& utc);
 
 public:
     const String& getLastError() const { return lastError_; }
@@ -189,6 +219,14 @@ public:
     bool sendSMS(const String& number, const String& message);
     bool sendHTTP(const String& url, const String& data, String& response);
     bool sendJSON(const String& url, JsonDocument& json, String& response);
+
+    // MQTT (new capability)
+    bool mqttConfigure(const String& broker, uint16_t port, const String& clientId);
+    bool mqttConnect(uint32_t timeoutMs = 15000);
+    bool mqttPublish(const String& topic, const String& payload, int qos = 1, bool retain = false);
+    bool mqttSubscribe(const String& topic, int qos = 1);
+    void mqttPoll();
+    void setMqttCallback(SIM7080G_MQTT::MessageCallback cb);
     
     // Status
     CatMGNSSState getState() { return state; }

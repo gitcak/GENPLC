@@ -1,6 +1,7 @@
 #include "fonts.h"
 #include <M5Unified.h>
 #include "config/system_config.h"
+#include <cstring>
 #if ENABLE_SD
 #include <SD.h>
 #endif
@@ -15,7 +16,8 @@
 
 namespace ui { namespace fonts {
 
-static String s_fontPath = "/fonts/Montserrat-SemiBoldItalic-16.vlw"; // default
+// Use static char array instead of String to avoid heap allocation
+static char s_fontPath[64] = "/fonts/Montserrat-SemiBoldItalic-16.vlw";
 static bool s_checked = false;
 static bool s_available = false;
 
@@ -24,7 +26,7 @@ bool init() {
     s_checked = true;
 #if ENABLE_SD
     // Check SD for font file
-    if (SD.begin() && SD.exists(s_fontPath.c_str())) {
+    if (SD.begin() && SD.exists(s_fontPath)) {
         s_available = true;
     } else {
         // Try a couple of alternates
@@ -34,7 +36,12 @@ bool init() {
             "/fonts/Montserrat-SemiBoldItalic-24.vlw"
         };
         for (auto p : alts) {
-            if (SD.begin() && SD.exists(p)) { s_fontPath = p; s_available = true; break; }
+            if (SD.begin() && SD.exists(p)) {
+                strncpy(s_fontPath, p, sizeof(s_fontPath) - 1);
+                s_fontPath[sizeof(s_fontPath) - 1] = '\0';
+                s_available = true;
+                break;
+            }
         }
     }
 #else
@@ -47,14 +54,14 @@ bool init() {
 bool applyToDisplay() {
     if (!s_checked) init();
     if (!s_available) return false;
-    return M5.Display.loadFont(s_fontPath.c_str());
+    return M5.Display.loadFont(s_fontPath);
 }
 
 bool applyToSprite(lgfx::LGFX_Sprite* s) {
     if (!s) return false;
     if (!s_checked) init();
     if (!s_available) return false;
-    return s->loadFont(s_fontPath.c_str());
+    return s->loadFont(s_fontPath);
 }
 
 } }

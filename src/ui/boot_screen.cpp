@@ -6,9 +6,11 @@
 #include <M5StamPLC.h>
 #include "boot_screen.h"
 #include "../config/system_config.h"
+#include <cstring>
 
+// Boot log entry with fixed-size buffer (no heap allocation)
 struct BootLogEntry {
-    String text;
+    char text[48];  // Fixed buffer for status message
     bool passed;
 };
 
@@ -26,7 +28,8 @@ void drawBootScreen(const char* status, int progress, bool passed) {
 
     if (status && status[0]) {
         BootLogEntry entry;
-        entry.text = status;
+        strncpy(entry.text, status, sizeof(entry.text) - 1);
+        entry.text[sizeof(entry.text) - 1] = '\0';
         entry.passed = passed;
         if (logCount < BOOT_LOG_CAPACITY) {
             logEntries[logCount++] = entry;
@@ -77,7 +80,7 @@ void drawBootScreen(const char* status, int progress, bool passed) {
         const auto& entry = logEntries[i];
         display.setCursor(12, logTop + static_cast<int>(i) * lineHeight);
         display.setTextColor(entry.passed ? GREEN : RED, BLACK);
-        display.printf("%s %s", entry.passed ? "[OK ]" : "[FAIL]", entry.text.c_str());
+        display.printf("%s %s", entry.passed ? "[OK ]" : "[FAIL]", entry.text);
     }
 
     int logAreaBottom = logTop + static_cast<int>(logCount) * lineHeight;

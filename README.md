@@ -106,24 +106,27 @@ pio check --severity=high
 ## 📊 **System Features**
 
 ### **Display Interface**
-- **Full 320px width** utilization
+- **Modern Industrial Dark Theme** - Consistent color palette across all pages
+- **Full 320px width** utilization with optimized rendering
 - **Multi-page navigation** with launcher interface
-- **Stable page navigation** with timing controls
-- **Professional interface** with comprehensive status display
-- **Settings page** with QR code for web interface access
+- **Primitive-drawn vector icons** - Satellite, GPS, Cellular, Gear, Log icons
+- **Interactive Settings Page** - Adjustable brightness, sleep timeout, and system info
+- **Per-page scroll support** - Dynamic content height calculation for smooth scrolling
+- **Memory-efficient rendering** - Static buffers, no heap allocations during draw
 
 ### **Page Navigation**
-- **Landing Page:** System status and launcher menu
-- **GPS Page:** GNSS data (position, satellites, speed)
-- **4G Cellular Page:** Cellular status (signal, network, connection)
-- **System Info Page:** System debug information and hardware status
-- **Settings Page:** QR code linking to web interface
+- **Landing Page:** System overview with status icons, signal bars, and navigation hints
+- **GNSS Page:** GPS/GNSS data (position, satellites, speed, UTC time)
+- **Cellular Page:** Network status (operator, signal strength, connection stats)
+- **System Page:** Hardware status, memory usage, module readiness, sensors
+- **Settings Page:** Interactive controls for display brightness, sleep settings, firmware info
+- **Logs Page:** System log viewer with scrollable content
 
 ### **Button Controls**
 - **A Button:** Back/Exit (returns to landing page)
-- **B Button:** Navigate up/previous item
-- **C Button:** Navigate down/next item
-- **Long Press C:** Enter edit mode (where applicable)
+- **B Button:** Navigate up/previous item (short press) or decrease value (long press on Settings)
+- **C Button:** Navigate down/next item (short press) or increase value (long press on Settings)
+- **Long Press:** Adjust values on Settings page (brightness, sleep timeout)
 
 ### **Debug System**
 - **Comprehensive logging** to serial monitor
@@ -144,10 +147,11 @@ pio check --severity=high
 - **Performance Monitoring** and statistics
 
 ### **Settings & Configuration**
-- **QR Code Interface:** Scan to access web configuration
-- **System LED Control:** Automatic status indication
-- **Web Interface:** Advanced configuration via HTTP server
-- **Persistent Storage:** Settings saved to flash memory
+- **Display Settings:** Brightness control (10-255, 25-step increments)
+- **Sleep Management:** Auto-sleep toggle and timeout configuration (30s-10min)
+- **System Information:** Firmware version, free heap, SD card status, uptime
+- **Persistent Storage:** All settings saved to NVS (Non-Volatile Storage)
+- **System LED Control:** Automatic status indication (Green=OK, Orange=Boot, Red=Fault)
 
 ## 🔧 **Configuration**
 
@@ -172,16 +176,23 @@ build_type = debug
 ## 📈 **Performance Metrics**
 
 ### **Memory Usage**
-- **RAM:** 16.0% (52,448 bytes / 327,680 bytes)
-- **Flash:** 88.6% (1,160,777 bytes / 1,310,720 bytes)
-- **Stack:** Optimized for FreeRTOS tasks
+- **RAM:** 7.7% (25,304 bytes / 327,680 bytes) - Optimized after UI refactoring
+- **Flash:** 46.5% (609,353 bytes / 1,310,720 bytes) - Well within limits
+- **Stack:** Optimized for FreeRTOS tasks with conservative allocation
+
+### **UI Refactoring Improvements**
+- **Theme Unification:** Consistent dark industrial theme across all pages
+- **Memory Safety:** Eliminated String allocations, using static buffers
+- **Dead Code Removal:** Removed unused functions and lambdas
+- **Icon System:** Primitive-drawn vector icons replacing placeholder blocks
+- **Settings Integration:** Fully functional display controls with NVS persistence
 
 ### **Task Priorities**
 - **Display Task:** High priority for UI responsiveness
 - **Button Task:** High priority for user input
 - **Cellular Task:** Medium priority for communication
 - **GNSS Task:** Medium priority for positioning
-- **Debug Task:** Low priority for monitoring
+- **Status Task:** Low priority for system monitoring
 
 ## 🐛 **Debugging & Troubleshooting**
 
@@ -212,10 +223,17 @@ build_type = debug
 ## 📚 **Documentation**
 
 ### **Key Documents**
-- **[DEVELOPMENT_CHECKLIST.md](DEVELOPMENT_CHECKLIST.md):** Complete development standards
-- **[SYSTEM_DOCUMENTATION.md](SYSTEM_DOCUMENTATION.md):** Detailed system architecture
-- **[platformio.ini](platformio.ini):** Build configuration
-- **[include/data_structures.h](include/data_structures.h):** Data structure definitions
+- **[CLAUDE.md](CLAUDE.md):** Comprehensive AI assistant guidelines and project overview
+- **[CHANGELOG.md](CHANGELOG.md):** Version history and changes
+- **[docs/UI_REFACTORING_CHANGELOG.md](docs/UI_REFACTORING_CHANGELOG.md):** Complete UI refactoring details
+- **[docs/RECOVERY_DEPLOYMENT_GUIDE.md](docs/RECOVERY_DEPLOYMENT_GUIDE.md):** Deployment procedures
+- **[FINAL_PROJECT_STATUS.md](FINAL_PROJECT_STATUS.md):** Project status and recovery information
+- **[platformio.ini](platformio.ini):** Build configuration with multiple environments
+
+### **Archived Documentation**
+Historical planning documents are archived in `docs/archive/`:
+- Project refresh planning documents
+- Completed UI refactoring planning context
 
 ### **Hardware Documentation**
 - **M5Stack StampPLC:** [Official Documentation](https://docs.m5stack.com/)
@@ -249,6 +267,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Last Updated:** January 2025  
-**Version:** 1.1.0  
+**Last Updated:** February 2026  
+**Version:** 1.2.0  
 **Status:** Production Ready ✅
+
+### Recent Updates
+- **UI Refactoring Complete:** Modern theme, vector icons, interactive settings
+- **Memory Optimization:** Reduced RAM usage to 7.7% through static buffer usage
+- **Settings Integration:** Fully functional display controls with NVS persistence

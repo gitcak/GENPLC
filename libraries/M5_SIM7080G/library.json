@@ -1,0 +1,16 @@
+{
+  "name": "M5_SIM7080G",
+  "description": "M5Stack SIM7080G (CatM/NB-IoT + GNSS) AT-command helper library for ESP32",
+  "keywords": "catm, nb-iot, gnss, mqtt, http, sim7080g, m5stack",
+  "authors": {
+    "name": "M5Stack",
+    "url": "http://www.m5stack.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m5stack/M5_SIM7080G.git"
+  },
+  "version": "0.1.0",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": "espressif32"
+}

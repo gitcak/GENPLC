@@ -1,0 +1,6 @@
+version: "0.1.0"
+description: "M5Stack SIM7080G (CatM/NB-IoT + GNSS) AT-command helper library for ESP32"
+url: "https://github.com/m5stack/M5_SIM7080G.git"
+dependencies:
+  idf: ">=4.4"
+

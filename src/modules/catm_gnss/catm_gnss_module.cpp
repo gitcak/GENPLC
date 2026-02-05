@@ -6,13 +6,39 @@
 #include <string.h>
 extern EventGroupHandle_t xEventGroupSystemStatus;
 
+static bool parseHttpUrl(const String& url, SIM7080G_String& baseOut, SIM7080G_String& pathOut) {
+    int schemePos = url.indexOf("://");
+    if (schemePos < 0) {
+        return false;
+    }
+    int hostStart = schemePos + 3;
+    int pathStart = url.indexOf('/', hostStart);
+    if (pathStart < 0) {
+        baseOut = url;
+        pathOut = "/";
+        return true;
+    }
+    baseOut = url.substring(0, pathStart);
+    pathOut = url.substring(pathStart);
+    if (pathOut.length() == 0) {
+        pathOut = "/";
+    }
+    return true;
+}
+
 CatMGNSSModule::CatMGNSSModule() {
     isInitialized = false;
     state = CatMGNSSState::INITIALIZING;
     serialModule = nullptr;
+    modem_ = new M5_SIM7080G();
+    network_ = modem_ ? new SIM7080G_Network(*modem_) : nullptr;
+    gnss_ = modem_ ? new SIM7080G_GNSS(*modem_) : nullptr;
+    mqtt_ = modem_ ? new SIM7080G_MQTT(*modem_) : nullptr;
+    http_ = modem_ ? new SIM7080G_HTTP(*modem_) : nullptr;
     lastError_.clear();
     lastProbeRx_ = -1;
     lastProbeTx_ = -1;
+    lastHttpBaseUrl_.clear();
     
     // Initialize GNSS data
     gnssData.latitude = 0;
@@ -61,6 +87,7 @@ CatMGNSSModule::CatMGNSSModule() {
     networkTimeSynced_ = false;
     lastNetworkTimeSyncMs_ = 0;
     memset(&lastNetworkUtc_, 0, sizeof(lastNetworkUtc_));
+    lastHttpBaseUrl_.clear();
 
     
     // Create mutex
@@ -75,6 +102,17 @@ CatMGNSSModule::~CatMGNSSModule() {
         serialModule->end();
         delete serialModule;
     }
+
+    delete http_;
+    delete mqtt_;
+    delete gnss_;
+    delete network_;
+    delete modem_;
+    http_ = nullptr;
+    mqtt_ = nullptr;
+    gnss_ = nullptr;
+    network_ = nullptr;
+    modem_ = nullptr;
     
     if (serialMutex) {
         vSemaphoreDelete(serialMutex);
@@ -128,6 +166,9 @@ bool CatMGNSSModule::begin() {
     Serial.println("CatM+GNSS: Starting serial port...");
     Serial.flush();
     serialModule->begin(CATM_GNSS_BAUD_RATE, SERIAL_8N1, rx, tx);
+    if (modem_) {
+        modem_->Init(serialModule, rx, tx, CATM_GNSS_BAUD_RATE);
+    }
     
     Serial.println("CatM+GNSS: Waiting for serial to stabilize...");
     Serial.flush();
@@ -326,72 +367,52 @@ bool CatMGNSSModule::testAT() {
 }
 
 bool CatMGNSSModule::sendATCommand(const String& command, String& response, uint32_t timeout) {
-    // Enhanced null checks
-    if (!serialModule) {
-        Serial.println("CatM+GNSS: Serial module is null");
+    if (!serialModule || !serialMutex || !modem_) {
+        Serial.println("CatM+GNSS: Serial interface not ready");
         return false;
     }
-    if (!serialMutex) {
-        Serial.println("CatM+GNSS: Serial mutex is null");
-        return false;
-    }
-    
-    // Validate command string
+
     if (command.length() == 0) {
         Serial.println("CatM+GNSS: Empty command");
         return false;
     }
-    
-    // Try to take mutex
-    if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) {
         Serial.println("CatM+GNSS: Failed to take mutex");
         return false;
     }
-    
-    // Clear any pending data with bounds checking
-    while (serialModule->available()) {
-        serialModule->read();
+
+    Serial.println("CatM+GNSS: >>> " + command);
+    auto result = modem_->sendCommand(command, timeout, true);
+    response = result.raw;
+
+    if (result.status == M5_SIM7080G::Status::TransportError) {
+        return false;
     }
-    
-    // Send command
-    Serial.println("CatM+GNSS: >>> " + command); // Debug output
-    serialModule->println(command);
-    
-    // Wait for response
-    bool result = waitForResponse(response, timeout);
-    
-    // Release mutex
-    xSemaphoreGive(serialMutex);
-    
-    return result;
+    return (result.status == M5_SIM7080G::Status::Ok || result.status == M5_SIM7080G::Status::Error);
 }
 
 bool CatMGNSSModule::sendATCommand(const char* command, char* response, size_t responseSize, uint32_t timeout) {
-    if (!serialModule || !command || !response || responseSize == 0) return false;
+    if (!serialModule || !modem_ || !command || !response || responseSize == 0) return false;
     if (!serialMutex) return false;
-    
-    // Try to take mutex
-    if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) {
         Serial.println("CatM+GNSS: Failed to take mutex");
         return false;
     }
-    
-    // Clear any pending data
-    while (serialModule->available()) {
-        serialModule->read();
+
+    Serial.printf("CatM+GNSS: >>> %s\n", command);
+    auto result = modem_->sendCommand(command, timeout, true);
+    const size_t copyLen = min(responseSize - 1, static_cast<size_t>(result.raw.length()));
+    memcpy(response, result.raw.c_str(), copyLen);
+    response[copyLen] = '\0';
+
+    if (result.status == M5_SIM7080G::Status::TransportError) {
+        return false;
     }
-    
-    // Send command
-    Serial.printf("CatM+GNSS: >>> %s\n", command); // Debug output
-    serialModule->println(command);
-    
-    // Wait for response
-    bool result = waitForResponse(response, responseSize, timeout);
-    
-    // Release mutex
-    xSemaphoreGive(serialMutex);
-    
-    return result;
+    return (result.status == M5_SIM7080G::Status::Ok || result.status == M5_SIM7080G::Status::Error);
 }
 
 bool CatMGNSSModule::applyBaselineConfig() {
@@ -521,47 +542,78 @@ bool CatMGNSSModule::waitForResponse(char* response, size_t responseSize, uint32
 // GNSS Functions
 bool CatMGNSSModule::enableGNSS() {
     if (!isInitialized) return false;
-    
-    char response[128];
-    // Power on GNSS
-    if (!sendATCommand("AT+CGNSPWR=1", response, sizeof(response), 2000) || strstr(response, POOL_STRING("OK")) == nullptr) {
+
+    bool ok = false;
+    if (gnss_) {
+        MutexGuard guard(serialMutex);
+        if (!guard.acquired()) return false;
+        ok = gnss_->powerOn(5000);
+    }
+
+    if (!ok) {
         Serial.println("CatM+GNSS: Failed to power on GNSS");
         return false;
     }
-    
+
     // Configure GNSS output format (optional; some firmware may not support this)
+    char response[128];
     if (!sendATCommand("AT+CGNSSEQ=\"RMC\"", response, sizeof(response), 1000)) {
         Serial.println("CatM+GNSS: GNSS sequence config not supported; continuing");
     }
-    
+
     Serial.println("CatM+GNSS: GNSS enabled successfully");
     return true;
 }
 
 bool CatMGNSSModule::disableGNSS() {
     if (!isInitialized) return false;
-    
-    char response[128];
-    if (!sendATCommand("AT+CGNSPWR=0", response, sizeof(response), 2000) || strstr(response, POOL_STRING("OK")) == nullptr) {
+
+    bool ok = false;
+    if (gnss_) {
+        MutexGuard guard(serialMutex);
+        if (!guard.acquired()) return false;
+        ok = gnss_->powerOff(2000);
+    }
+
+    if (!ok) {
         Serial.println("CatM+GNSS: Failed to power off GNSS");
         return false;
     }
-    
+
     Serial.println("CatM+GNSS: GNSS disabled successfully");
     return true;
 }
 
 bool CatMGNSSModule::updateGNSSData() {
     if (!isInitialized) return false;
-    
-    char response[512];
-    if (!sendATCommand("AT+CGNSINF", response, sizeof(response), 2000)) {
-        Serial.println("CatM+GNSS: Failed to get GNSS information");
+
+    if (!gnss_) return false;
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) return false;
+
+    sim7080g::GNSSFix fix = gnss_->getFix(2000);
+    if (!fix.valid) {
+        gnssData.isValid = false;
         return false;
     }
-    
-    // Parse GNSS data
-    return parseGNSSData(response);
+
+    gnssData.latitude = fix.latitude;
+    gnssData.longitude = fix.longitude;
+    gnssData.altitude = fix.altitude_m;
+    gnssData.speed = static_cast<float>(fix.speed_kph);
+    gnssData.course = static_cast<float>(fix.course_deg);
+    gnssData.satellites = fix.satellites;
+    gnssData.hdop = fix.hdop;
+    gnssData.pdop = fix.pdop;
+    gnssData.vdop = fix.vdop;
+    gnssData.isValid = true;
+    gnssData.lastUpdate = millis();
+
+    parseGnssUtc(fix.utc);
+
+    Serial.printf("CatM+GNSS: Valid fix - Lat: %.6f, Lon: %.6f, Alt: %.1f, Sats: %d\n",
+                 gnssData.latitude, gnssData.longitude, gnssData.altitude, gnssData.satellites);
+    return true;
 }
 
 bool CatMGNSSModule::parseGNSSData(const String& data) {
@@ -821,6 +873,59 @@ bool CatMGNSSModule::parseGNSSData(const char* data) {
     return true;
 }
 
+bool CatMGNSSModule::parseGnssUtc(const SIM7080G_String& utc) {
+    if (utc.length() == 0) return false;
+
+    String digits;
+    digits.reserve(16);
+    for (size_t i = 0; i < utc.length() && digits.length() < 14; ++i) {
+        char c = utc.charAt(i);
+        if (c >= '0' && c <= '9') {
+            digits += c;
+        }
+    }
+
+    if (digits.length() < 12) {
+        return false;
+    }
+
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+
+    if (digits.length() >= 14) {
+        year = digits.substring(0, 4).toInt();
+        month = digits.substring(4, 6).toInt();
+        day = digits.substring(6, 8).toInt();
+        hour = digits.substring(8, 10).toInt();
+        minute = digits.substring(10, 12).toInt();
+        second = digits.substring(12, 14).toInt();
+    } else {
+        year = 2000 + digits.substring(0, 2).toInt();
+        month = digits.substring(2, 4).toInt();
+        day = digits.substring(4, 6).toInt();
+        hour = digits.substring(6, 8).toInt();
+        minute = digits.substring(8, 10).toInt();
+        second = digits.substring(10, 12).toInt();
+    }
+
+    if (year < 2020 || month < 1 || month > 12 || day < 1 || day > 31 ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+        return false;
+    }
+
+    gnssData.year = static_cast<uint16_t>(year);
+    gnssData.month = static_cast<uint8_t>(month);
+    gnssData.day = static_cast<uint8_t>(day);
+    gnssData.hour = static_cast<uint8_t>(hour);
+    gnssData.minute = static_cast<uint8_t>(minute);
+    gnssData.second = static_cast<uint8_t>(second);
+    return true;
+}
+
 GNSSData CatMGNSSModule::getGNSSData() {
     return gnssData;
 }
@@ -840,9 +945,33 @@ void CatMGNSSModule::setApnCredentials(const String& apn, const String& user, co
 }
 
 bool CatMGNSSModule::ensureRegistered(uint32_t maxWaitMs) {
-    String response; uint32_t start=millis();
+    String response;
     sendATCommand("AT+CEREG=2", response, 2000);
-    while (millis()-start < maxWaitMs) {
+
+    if (network_) {
+        MutexGuard guard(serialMutex);
+        if (guard.acquired()) {
+            bool ok = network_->waitForNetwork(maxWaitMs);
+            SIM7080G_String statusLine = network_->getNetworkStatus(1500);
+            if (statusLine.length()) {
+                int comma = statusLine.indexOf(',');
+                if (comma > 0) {
+                    int end = statusLine.indexOf(',', comma + 1);
+                    String stateStr = (end > comma) ? statusLine.substring(comma + 1, end) : statusLine.substring(comma + 1);
+                    stateStr.trim();
+                    uint8_t regState = (uint8_t)stateStr.toInt();
+                    updateRegistrationState(regState);
+                }
+            }
+            if (ok) {
+                cellularData.lastUpdate = millis();
+                return true;
+            }
+        }
+    }
+
+    uint32_t start = millis();
+    while (millis() - start < maxWaitMs) {
         if (sendATCommand("AT+CEREG?", response, 2000)) {
             int idx = response.indexOf("+CEREG:");
             if (idx >= 0) {
@@ -916,35 +1045,47 @@ void CatMGNSSModule::refreshDetachReason(const String& resp) {
 }
 
 bool CatMGNSSModule::configureAPN() {
-    String response; bool ok=false;
-    if (apn_.length()) {
-        String cmd1 = String("AT+CNCFG=0,1,\"") + apn_ + "\"";
-        ok = sendATCommand(cmd1, response, 3000) && response.indexOf("OK")>=0;
-        if (!ok) {
-            String cmd2 = String("AT+CNCFG=0,\"") + apn_ + "\"";
-            ok = sendATCommand(cmd2, response, 3000) && response.indexOf("OK")>=0;
-        }
-        // Optional user/pass for some networks
-        if (apnUser_.length()) {
-            String userCmd = String("AT+CNCFG=0,3,\"") + apnUser_ + "\"";
-            sendATCommand(userCmd, response, 3000);
-        }
-        if (apnPass_.length()) {
-            String passCmd = String("AT+CNCFG=0,4,\"") + apnPass_ + "\"";
-            ok = sendATCommand(passCmd, response, 3000) && response.indexOf("OK") >= 0;
-        }
+    if (!apn_.length() || !network_ || !serialMutex) {
+        return false;
+    }
+
+    bool ok = false;
+    {
+        MutexGuard guard(serialMutex);
+        if (!guard.acquired()) return false;
+        ok = network_->setAPN(apn_, apnUser_, apnPass_, 1);
+    }
+
+    if (ok) {
+        return true;
+    }
+
+    // Fallback: legacy CNCFG profile config
+    String response;
+    String cmd1 = String("AT+CNCFG=0,1,\"") + apn_ + "\"";
+    ok = sendATCommand(cmd1, response, 3000) && response.indexOf("OK") >= 0;
+    if (!ok) {
+        String cmd2 = String("AT+CNCFG=0,\"") + apn_ + "\"";
+        ok = sendATCommand(cmd2, response, 3000) && response.indexOf("OK") >= 0;
+    }
+    if (apnUser_.length()) {
+        String userCmd = String("AT+CNCFG=0,3,\"") + apnUser_ + "\"";
+        sendATCommand(userCmd, response, 3000);
+    }
+    if (apnPass_.length()) {
+        String passCmd = String("AT+CNCFG=0,4,\"") + apnPass_ + "\"";
+        ok = sendATCommand(passCmd, response, 3000) && response.indexOf("OK") >= 0;
     }
     return ok;
 }
 
 bool CatMGNSSModule::activatePDP(uint32_t timeoutMs) {
     String response;
-    uint32_t start = millis();
     const int MAX_RETRIES = 3;
-    
+
     for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         Serial.printf("CatM+GNSS: PDP activation attempt %d/%d\n", attempt, MAX_RETRIES);
-        
+
         // Check if PDP is already active before attempting activation
         if (sendATCommand("AT+CNACT?", response, 3000)) {
             bool anyActive = false;
@@ -956,45 +1097,46 @@ bool CatMGNSSModule::activatePDP(uint32_t timeoutMs) {
                 return true;
             }
         }
-        
-        // Attempt PDP activation
-        if (sendATCommand("AT+CNACT=0,1", response, 15000)) {
-            if (response.indexOf("OK") >= 0) {
-                Serial.println("CatM+GNSS: PDP activation command accepted");
-                
-                // Wait a moment for IP assignment
-                vTaskDelay(pdMS_TO_TICKS(2000));
-                
-                // Verify IP assignment
-                if (sendATCommand("AT+CNACT?", response, 5000)) {
-                    bool anyActive = false;
-                    String ip;
-                    if (parseCNACTResponse(response, anyActive, ip) && anyActive && ip.length() > 0 && ip != "0.0.0.0") {
-                        Serial.printf("CatM+GNSS: PDP activated successfully with IP: %s\n", ip.c_str());
-                        cellularData.hasIpAddress = true;
-                        cellularData.ipAddress = ip;
-                        return true;
-                    } else {
-                        Serial.printf("CatM+GNSS: PDP activation OK but no valid IP assigned: %s\n", ip.c_str());
-                    }
-                }
-            } else {
-                Serial.printf("CatM+GNSS: PDP activation failed on attempt %d\n", attempt);
-                // Get detailed error information
-                if (sendATCommand("AT+CEER", response, 3000)) {
-                    Serial.printf("CatM+GNSS: PDP error details: %s\n", response.c_str());
-                }
+
+        bool activated = false;
+        if (network_) {
+            MutexGuard guard(serialMutex);
+            if (guard.acquired()) {
+                activated = network_->activatePDP(0);
             }
         }
-        
-        // Wait before retry with exponential backoff
+        if (!activated) {
+            Serial.printf("CatM+GNSS: PDP activation command failed on attempt %d\n", attempt);
+        }
+
+        if (activated) {
+            Serial.println("CatM+GNSS: PDP activation command accepted");
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            if (sendATCommand("AT+CNACT?", response, 5000)) {
+                bool anyActive = false;
+                String ip;
+                if (parseCNACTResponse(response, anyActive, ip) && anyActive && ip.length() > 0 && ip != "0.0.0.0") {
+                    Serial.printf("CatM+GNSS: PDP activated successfully with IP: %s\n", ip.c_str());
+                    cellularData.hasIpAddress = true;
+                    cellularData.ipAddress = ip;
+                    return true;
+                } else {
+                    Serial.printf("CatM+GNSS: PDP activation OK but no valid IP assigned: %s\n", ip.c_str());
+                }
+            }
+        } else {
+            if (sendATCommand("AT+CEER", response, 3000)) {
+                Serial.printf("CatM+GNSS: PDP error details: %s\n", response.c_str());
+            }
+        }
+
         if (attempt < MAX_RETRIES) {
-            uint32_t backoffMs = 2000 * (1 << (attempt - 1)); // 2s, 4s, 8s
+            uint32_t backoffMs = 2000 * (1 << (attempt - 1));
             Serial.printf("CatM+GNSS: Waiting %ums before retry...\n", backoffMs);
             vTaskDelay(pdMS_TO_TICKS(backoffMs));
         }
     }
-    
+
     Serial.println("CatM+GNSS: PDP activation failed after all retries");
     return false;
 }
@@ -1133,10 +1275,14 @@ bool CatMGNSSModule::connectNetwork(const String& apn, const String& user, const
 
 bool CatMGNSSModule::disconnectNetwork() {
     if (!isInitialized) return false;
-    
-    String response;
-    // Deactivate PDP with SIM7080G CNACT command for context 0
-    if (!sendATCommand("AT+CNACT=0,0", response, 10000) || response.indexOf("OK") < 0) {
+
+    bool ok = false;
+    if (network_) {
+        MutexGuard guard(serialMutex);
+        if (!guard.acquired()) return false;
+        ok = network_->deactivatePDP(0);
+    }
+    if (!ok) {
         Serial.println("CatM+GNSS: Failed to deactivate PDP context");
         return false;
     }
@@ -1174,21 +1320,24 @@ bool CatMGNSSModule::isNetworkConnected() {
         }
     }
 
-    if (sendATCommand("AT+CEREG?", response, 2000)) {
-        int idx = response.indexOf("+CEREG:");
-        if (idx >= 0) {
-            int comma = response.indexOf(',', idx);
-            if (comma > 0) {
-                int end = response.indexOf(',', comma + 1);
-                String stateStr = (end > comma) ? response.substring(comma + 1, end) : response.substring(comma + 1);
-                stateStr.trim();
-                uint8_t regState = (uint8_t)stateStr.toInt();
-                updateRegistrationState(regState);
-                if (regState == 1 || regState == 5) {
-                    cellularData.isConnected = true;
-                    cellularData.lastUpdate = millis();
-                    updateNetworkStats();
-                    return true;
+    if (network_) {
+        MutexGuard guard(serialMutex);
+        if (guard.acquired()) {
+            SIM7080G_String statusLine = network_->getNetworkStatus(1500);
+            if (statusLine.length()) {
+                int comma = statusLine.indexOf(',');
+                if (comma > 0) {
+                    int end = statusLine.indexOf(',', comma + 1);
+                    String stateStr = (end > comma) ? statusLine.substring(comma + 1, end) : statusLine.substring(comma + 1);
+                    stateStr.trim();
+                    uint8_t regState = (uint8_t)stateStr.toInt();
+                    updateRegistrationState(regState);
+                    if (regState == 1 || regState == 5) {
+                        cellularData.isConnected = true;
+                        cellularData.lastUpdate = millis();
+                        updateNetworkStats();
+                        return true;
+                    }
                 }
             }
         }
@@ -1209,32 +1358,22 @@ bool CatMGNSSModule::isNetworkConnected() {
 
 int8_t CatMGNSSModule::getSignalStrength() {
     if (!isInitialized) return -100;
-    
-    String response;
-    if (!sendATCommand("AT+CSQ", response) || response.indexOf("+CSQ:") < 0) {
-        return -100;
+
+    if (!network_) return -100;
+    int8_t rssi = -100;
+    {
+        MutexGuard guard(serialMutex);
+        if (!guard.acquired()) return -100;
+        sim7080g::SignalQuality q = network_->getSignalQuality(1000);
+        if (!q.valid) return -100;
+        if (q.rssi == 99 || q.rssi < 0) {
+            rssi = -100;
+        } else {
+            rssi = -113 + (2 * q.rssi);
+        }
     }
-    
-    // Parse response
-    int start = response.indexOf("+CSQ: ") + 6;
-    int end = response.indexOf(",", start);
-    if (start < 6 || end < 0) {
-        return -100;
-    }
-    
-    int csq = response.substring(start, end).toInt();
-    
-    // Convert CSQ to dBm
-    int8_t rssi;
-    if (csq == 99) {
-        rssi = -100; // Unknown
-    } else {
-        rssi = -113 + (2 * csq); // Convert to dBm
-    }
-    
-    // Update data
+
     cellularData.signalStrength = rssi;
-    
     return rssi;
 }
 
@@ -1536,98 +1675,41 @@ bool CatMGNSSModule::sendSMS(const String& number, const String& message) {
 }
 
 bool CatMGNSSModule::sendHTTP(const String& url, const String& data, String& response) {
-    if (!isInitialized || !cellularData.isConnected) return false;
-    
-    String atResponse;
-    
-    // Initialize HTTP service
-    if (!sendATCommand("AT+HTTPINIT", atResponse) || atResponse.indexOf("OK") < 0) {
-        Serial.println("CatM+GNSS: Failed to initialize HTTP");
-        return false;
-    }
-    
-    // Set HTTP parameters - URL
-    String urlCmd = "AT+HTTPPARA=\"URL\",\"" + url + "\"";
-    if (!sendATCommand(urlCmd, atResponse) || atResponse.indexOf("OK") < 0) {
-        Serial.println("CatM+GNSS: Failed to set URL");
-        sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
+    if (!isInitialized || !cellularData.isConnected || !http_) return false;
+
+    SIM7080G_String baseUrl;
+    SIM7080G_String path;
+    if (!parseHttpUrl(url, baseUrl, path)) {
+        Serial.println("CatM+GNSS: Invalid HTTP URL");
         return false;
     }
 
-    // Determine if this is GET or POST based on data presence
-    bool isGetRequest = (data.length() == 0);
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) return false;
 
-    // Set HTTP parameters - Content Type (needed for both GET and POST)
-    if (!sendATCommand("AT+HTTPPARA=\"CONTENT\",\"application/json\"", atResponse) || atResponse.indexOf("OK") < 0) {
-        Serial.println("CatM+GNSS: Failed to set content type");
-        sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
-        return false;
+    if (baseUrl != lastHttpBaseUrl_) {
+        if (!http_->configure(baseUrl, 1024, 350, 5000)) {
+            Serial.println("CatM+GNSS: HTTP configure failed");
+            return false;
+        }
+        lastHttpBaseUrl_ = baseUrl;
     }
 
-    if (!isGetRequest) {
-        // Set HTTP data (only for POST)
-        String dataCmd = "AT+HTTPDATA=" + String(data.length()) + ",10000";
-        if (!sendATCommand(dataCmd, atResponse, 5000) || atResponse.indexOf("DOWNLOAD") < 0) {
-            Serial.println("CatM+GNSS: Failed to start HTTP data");
-            sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
-            return false;
-        }
-        
-        // Take mutex for direct write
-        if (!serialMutex || xSemaphoreTake(serialMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
-            Serial.println("CatM+GNSS: Failed to take mutex for HTTP data");
-            sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
-            return false;
-        }
-        
-        // Send data
-        serialModule->print(data);
-        delay(500);
-        
-        // Wait for response
-        bool result = waitForResponse(atResponse, 5000);
-        
-        // Release mutex
-        xSemaphoreGive(serialMutex);
-        
-        if (!result || atResponse.indexOf("OK") < 0) {
-            Serial.println("CatM+GNSS: Failed to send HTTP data");
-            sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
-            return false;
-        }
-    }
-    
-    // Send HTTP request (GET=0, POST=1)
-    String actionCmd = isGetRequest ? "AT+HTTPACTION=0" : "AT+HTTPACTION=1";
-    String expectedResponse = isGetRequest ? "+HTTPACTION: 0," : "+HTTPACTION: 1,";
-    
-    if (!sendATCommand(actionCmd, atResponse, 30000) || atResponse.indexOf(expectedResponse) < 0) {
-        Serial.printf("CatM+GNSS: Failed to send HTTP %s\n", isGetRequest ? "GET" : "POST");
-        sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
-        return false;
-    }
-    
-    // Get HTTP response
-    if (!sendATCommand("AT+HTTPREAD", atResponse, 10000) || atResponse.indexOf("+HTTPREAD:") < 0) {
-        Serial.println("CatM+GNSS: Failed to read HTTP response");
-        sendATCommand("AT+HTTPTERM", atResponse); // Terminate HTTP service
-        return false;
-    }
-    
-    // Parse response
-    int start = atResponse.indexOf("+HTTPREAD:") + 10;
-    int end = atResponse.indexOf("\r\n\r\nOK", start);
-    if (start < 10 || end < 0) {
-        response = "";
+    const bool isGetRequest = (data.length() == 0);
+    sim7080g::HttpResponse httpResp{};
+    if (isGetRequest) {
+        httpResp = http_->get(path, 30000);
     } else {
-        // Find the actual content start (skip the content length line)
-        start = atResponse.indexOf("\r\n", start) + 2;
-        response = atResponse.substring(start, end);
+        httpResp = http_->post(path, data, "application/json", 30000);
     }
-    
-    // Terminate HTTP service
-    sendATCommand("AT+HTTPTERM", atResponse);
-    
+
+    if (httpResp.status != sim7080g::Status::Ok) {
+        Serial.printf("CatM+GNSS: HTTP %s request failed\n", isGetRequest ? "GET" : "POST");
+        response = "";
+        return false;
+    }
+
+    response = httpResp.body;
     Serial.printf("CatM+GNSS: HTTP %s request sent successfully\n", isGetRequest ? "GET" : "POST");
     return true;
 }
@@ -1639,6 +1721,46 @@ bool CatMGNSSModule::sendJSON(const String& url, JsonDocument& json, String& res
     
     // Send HTTP request
     return sendHTTP(url, jsonStr, response);
+}
+
+bool CatMGNSSModule::mqttConfigure(const String& broker, uint16_t port, const String& clientId) {
+    if (!mqtt_ || !serialMutex) return false;
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) return false;
+    return mqtt_->configure(broker, port, clientId, 60, true);
+}
+
+bool CatMGNSSModule::mqttConnect(uint32_t timeoutMs) {
+    if (!mqtt_ || !serialMutex) return false;
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) return false;
+    return mqtt_->connect(timeoutMs);
+}
+
+bool CatMGNSSModule::mqttPublish(const String& topic, const String& payload, int qos, bool retain) {
+    if (!mqtt_ || !serialMutex) return false;
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) return false;
+    return mqtt_->publish(topic, payload, qos, retain, 10000);
+}
+
+bool CatMGNSSModule::mqttSubscribe(const String& topic, int qos) {
+    if (!mqtt_ || !serialMutex) return false;
+    MutexGuard guard(serialMutex);
+    if (!guard.acquired()) return false;
+    return mqtt_->subscribe(topic, qos, 3000);
+}
+
+void CatMGNSSModule::mqttPoll() {
+    if (!mqtt_ || !serialMutex) return;
+    MutexGuard guard(serialMutex, 0);
+    if (!guard.acquired()) return;
+    mqtt_->poll(0);
+}
+
+void CatMGNSSModule::setMqttCallback(SIM7080G_MQTT::MessageCallback cb) {
+    if (!mqtt_) return;
+    mqtt_->setCallback(cb);
 }
 
 void CatMGNSSModule::printStatus() {

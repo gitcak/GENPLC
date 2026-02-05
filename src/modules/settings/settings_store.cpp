@@ -195,7 +195,7 @@ bool settingsLoad(AppSettings& s){
 }
 
 bool settingsSave(const AppSettings& s){
-    Preferences p; 
+    Preferences p;
     if(!p.begin(NS, false)) {
         // Could not open/create namespace
         return false;
@@ -208,4 +208,40 @@ bool settingsSave(const AppSettings& s){
     p.putString("httpToken", s.httpToken);
     p.end();
     return true;
+}
+
+// ============================================================================
+// Display Settings (separate namespace to avoid conflicts)
+// ============================================================================
+static const char* NS_DISPLAY = "display";
+
+void displaySettingsLoad(uint8_t& brightness, bool& sleepEnabled, uint16_t& sleepSec) {
+    Preferences p;
+    if (!p.begin(NS_DISPLAY, true)) {
+        // Defaults if NVS not available
+        brightness = 100;
+        sleepEnabled = true;
+        sleepSec = 120;
+        return;
+    }
+    brightness = p.getUChar("bright", 100);
+    sleepEnabled = p.getBool("sleepEn", true);
+    sleepSec = p.getUShort("sleepSec", 120);
+    p.end();
+
+    // Clamp values to valid ranges
+    if (brightness == 0) brightness = 10;  // Minimum visible brightness
+    if (sleepSec < 30) sleepSec = 30;
+    if (sleepSec > 600) sleepSec = 600;
+}
+
+void displaySettingsSave(uint8_t brightness, bool sleepEnabled, uint16_t sleepSec) {
+    Preferences p;
+    if (!p.begin(NS_DISPLAY, false)) {
+        return;
+    }
+    p.putUChar("bright", brightness);
+    p.putBool("sleepEn", sleepEnabled);
+    p.putUShort("sleepSec", sleepSec);
+    p.end();
 }
